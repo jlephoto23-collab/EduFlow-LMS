@@ -82,8 +82,29 @@ body {
 }
 .brand { font-weight: 700; font-size: 1.1rem; }
 .user-chip {
-  font-size: .75rem; color: var(--muted); max-width: 140px;
+  font-size: .75rem; color: var(--muted); max-width: 120px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.live-badge {
+  font-size: .65rem;
+  font-weight: 600;
+  padding: .2rem .45rem;
+  border-radius: 999px;
+  background: rgba(148,163,184,.15);
+  color: var(--muted);
+}
+.live-badge.on {
+  background: rgba(34,197,94,.15);
+  color: #86efac;
+}
+.live-badge.pulse {
+  animation: livePulse .6s ease;
+}
+@keyframes livePulse {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.08); box-shadow: 0 0 0 4px rgba(34,197,94,.25); }
+  100% { transform: scale(1); }
 }
 
 .content {
@@ -147,9 +168,7 @@ body {
   border-color: var(--primary); background: rgba(37,99,235,.15);
 }
 
-.table-dark-ef {
-  width: 100%; font-size: .85rem;
-}
+.table-dark-ef { width: 100%; font-size: .85rem; }
 .table-dark-ef th, .table-dark-ef td {
   padding: .65rem .5rem; border-bottom: 1px solid rgba(255,255,255,.06);
 }
