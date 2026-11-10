@@ -1,195 +1,12 @@
-const KEYS = {
-  users: 'ef_users',
-  session: 'ef_session',
-  courses: 'ef_courses',
-  enrolments: 'ef_enrolments',
-  progress: 'ef_progress',
-  attempts: 'ef_attempts',
-  assignments: 'ef_assignments',
-  submissions: 'ef_submissions',
-};
-
-function uid() {
-  return 'id_' + Math.random().toString(36).slice(2, 11);
-}
-
-function load(key, fallback) {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function save(key, value) {
-  localStorage.setItem(key, JSON.stringify(value));
-}
-
-function seedIfNeeded() {
-  if (load(KEYS.users, null)) return;
-
-  const trainer = {
-    id: 'u_trainer',
-    name: 'Thabo Trainer',
-    email: 'trainer@eduflow.test',
-    password: 'trainer123',
-    role: 'trainer',
-  };
-  const learners = [
-    { id: 'u_l1', name: 'Aisha Learner', email: 'learner1@eduflow.test', password: 'learner123', role: 'learner' },
-    { id: 'u_l2', name: 'James Molefe', email: 'learner2@eduflow.test', password: 'learner123', role: 'learner' },
-    { id: 'u_l3', name: 'Naledi Khumalo', email: 'learner3@eduflow.test', password: 'learner123', role: 'learner' },
-  ];
-
-  const courses = [
-    {
-      id: 'c1',
-      title: 'Workplace Safety Essentials',
-      description: 'Core health and safety practices for the workplace. Includes lessons, quiz and a written assignment.',
-      category: 'Compliance',
-      trainerId: trainer.id,
-      lessons: [
-        {
-          id: 'l1',
-          title: 'Introduction to workplace safety',
-          type: 'content',
-          order: 1,
-          body: 'Safety starts with awareness. Every worker shares responsibility for a safe environment. This module covers duties of employers and employees under basic OHS principles.',
-        },
-        {
-          id: 'l2',
-          title: 'Hazard identification',
-          type: 'content',
-          order: 2,
-          body: 'Learn to spot common hazards: slips, electrical risks, chemical exposure, and unsafe equipment. Report hazards early and use the correct PPE.',
-        },
-        {
-          id: 'l3',
-          title: 'Safety knowledge check',
-          type: 'quiz',
-          order: 3,
-          body: '',
-          quiz: {
-            passMark: 70,
-            questions: [
-              {
-                q: 'Who is responsible for workplace safety?',
-                options: ['Only managers', 'Only the safety officer', 'Everyone at work', 'Visitors only'],
-                correctIndex: 2,
-              },
-              {
-                q: 'What should you do when you see a hazard?',
-                options: ['Ignore it if you are busy', 'Report it and keep others safe', 'Fix only electrical issues', 'Wait for an inspection'],
-                correctIndex: 1,
-              },
-              {
-                q: 'PPE stands for:',
-                options: ['Personal Protective Equipment', 'Public Protection Event', 'Primary Process Example', 'Paid Professional Employee'],
-                correctIndex: 0,
-              },
-            ],
-          },
-        },
-        {
-          id: 'l4',
-          title: 'Safety reflection assignment',
-          type: 'assignment',
-          order: 4,
-          body: 'Write a short reflection (minimum 3 sentences) describing one hazard in a workplace you know and how you would control it.',
-          assignmentId: 'a1',
-        },
-      ],
-    },
-    {
-      id: 'c2',
-      title: 'Customer Service Basics',
-      description: 'Practical skills for professional customer-facing service, with quiz and submission.',
-      category: 'Soft skills',
-      trainerId: trainer.id,
-      lessons: [
-        {
-          id: 'l5',
-          title: 'First impressions',
-          type: 'content',
-          order: 1,
-          body: 'Greeting, body language, and clear communication set the tone. Smile, introduce yourself, and listen before you respond.',
-        },
-        {
-          id: 'l6',
-          title: 'Handling complaints',
-          type: 'content',
-          order: 2,
-          body: 'Stay calm, acknowledge the issue, apologise where appropriate, and offer a clear next step. Document what was agreed.',
-        },
-        {
-          id: 'l7',
-          title: 'Service quiz',
-          type: 'quiz',
-          order: 3,
-          body: '',
-          quiz: {
-            passMark: 70,
-            questions: [
-              {
-                q: 'The best first step with an upset customer is to:',
-                options: ['Argue the policy', 'Listen and acknowledge', 'Transfer immediately', 'Offer a discount only'],
-                correctIndex: 1,
-              },
-              {
-                q: 'Clear communication means:',
-                options: ['Using jargon', 'Speaking as fast as possible', 'Simple language and confirming understanding', 'Avoiding eye contact'],
-                correctIndex: 2,
-              },
-            ],
-          },
-        },
-        {
-          id: 'l8',
-          title: 'Complaint response assignment',
-          type: 'assignment',
-          order: 4,
-          body: 'A customer is unhappy about a delayed service. Write the reply you would give (3–6 sentences).',
-          assignmentId: 'a2',
-        },
-      ],
-    },
-  ];
-
-  const assignments = [
-    {
-      id: 'a1',
-      courseId: 'c1',
-      lessonId: 'l4',
-      title: 'Safety reflection assignment',
-      instructions: 'Write a short reflection (minimum 3 sentences) describing one hazard in a workplace you know and how you would control it.',
-      maxScore: 100,
-    },
-    {
-      id: 'a2',
-      courseId: 'c2',
-      lessonId: 'l8',
-      title: 'Complaint response assignment',
-      instructions: 'A customer is unhappy about a delayed service. Write the reply you would give (3–6 sentences).',
-      maxScore: 100,
-    },
-  ];
-
-  const enrolments = [
-    { id: 'e1', courseId: 'c1', learnerId: 'u_l1', status: 'approved', enrolledAt: new Date().toISOString() },
-    { id: 'e2', courseId: 'c1', learnerId: 'u_l2', status: 'approved', enrolledAt: new Date().toISOString() },
-    { id: 'e3', courseId: 'c2', learnerId: 'u_l1', status: 'approved', enrolledAt: new Date().toISOString() },
-    { id: 'e4', courseId: 'c2', learnerId: 'u_l3', status: 'pending', enrolledAt: new Date().toISOString() },
-  ];
-
-  save(KEYS.users, [trainer, ...learners]);
-  save(KEYS.courses, courses);
-  save(KEYS.enrolments, enrolments);
-  save(KEYS.assignments, assignments);
-  save(KEYS.submissions, []);
-  save(KEYS.progress, []);
-  save(KEYS.attempts, []);
-}
+import {
+  KEYS,
+  load,
+  save,
+  uid,
+  seedIfNeeded,
+  onLiveChange,
+  getLiveMode,
+} from './store.js';
 
 function getSession() {
   return load(KEYS.session, null);
@@ -200,7 +17,7 @@ function setSession(user) {
     localStorage.removeItem(KEYS.session);
     return;
   }
-  save(KEYS.session, { id: user.id, name: user.name, email: user.email, role: user.role });
+  save(KEYS.session, { id: user.id, name: user.name, email: user.email, role: user.role }, { silent: true });
 }
 
 function login(email, password) {
@@ -231,42 +48,33 @@ function logout() {
 function getCourses() {
   return load(KEYS.courses, []);
 }
-
 function getCourse(id) {
   return getCourses().find((c) => c.id === id);
 }
-
 function getEnrolments() {
   return load(KEYS.enrolments, []);
 }
-
 function saveEnrolments(list) {
   save(KEYS.enrolments, list);
 }
-
 function getAssignments() {
   return load(KEYS.assignments, []);
 }
-
 function getSubmissions() {
   return load(KEYS.submissions, []);
 }
-
 function saveSubmissions(list) {
   save(KEYS.submissions, list);
 }
-
 function getProgressAll() {
   return load(KEYS.progress, []);
 }
-
 function getProgress(learnerId, courseId) {
   const all = getProgressAll();
   let row = all.find((p) => p.learnerId === learnerId && p.courseId === courseId);
   if (!row) row = { learnerId, courseId, completedLessonIds: [], percent: 0 };
   return row;
 }
-
 function saveProgress(row) {
   const all = getProgressAll();
   const i = all.findIndex((p) => p.learnerId === row.learnerId && p.courseId === row.courseId);
@@ -274,12 +82,10 @@ function saveProgress(row) {
   else all.push(row);
   save(KEYS.progress, all);
 }
-
 function computePercent(course, completedIds) {
   if (!course.lessons.length) return 0;
   return Math.round((completedIds.length / course.lessons.length) * 100);
 }
-
 function markLessonComplete(learnerId, courseId, lessonId) {
   const course = getCourse(courseId);
   if (!course) return;
@@ -288,17 +94,52 @@ function markLessonComplete(learnerId, courseId, lessonId) {
   row.percent = computePercent(course, row.completedLessonIds);
   saveProgress(row);
 }
-
 function enrolmentFor(learnerId, courseId) {
   return getEnrolments().find((e) => e.learnerId === learnerId && e.courseId === courseId);
 }
 
-// ---------- UI ----------
+// ---------- UI / live ----------
 let quizState = null;
+let currentView = { name: 'home' };
 
 const content = () => document.getElementById('content');
 const bottomNav = () => document.getElementById('bottom-nav');
 const btnBack = () => document.getElementById('btn-back');
+
+function updateLiveBadge() {
+  const el = document.getElementById('live-badge');
+  if (!el) return;
+  const mode = getLiveMode();
+  if (mode === 'firebase') {
+    el.textContent = '● Live cloud';
+    el.className = 'live-badge on';
+  } else {
+    el.textContent = '● Live sync';
+    el.className = 'live-badge on';
+    el.title = 'Real-time updates across browser tabs on this device';
+  }
+}
+
+function flashLive() {
+  const el = document.getElementById('live-badge');
+  if (!el) return;
+  el.classList.add('pulse');
+  setTimeout(() => el.classList.remove('pulse'), 600);
+}
+
+function refreshCurrentView() {
+  if (!getSession()) return;
+  flashLive();
+  const n = currentView.name;
+  if (n === 'home') goHome();
+  else if (n === 'approvals') renderApprovals();
+  else if (n === 'grade') renderGrading();
+  else if (n === 'report') renderReport();
+  else if (n === 'catalog') renderCatalog();
+  else if (n === 'about') renderAbout();
+  else if (n === 'course' && currentView.courseId != null)
+    renderCourseDetail(currentView.courseId, currentView.asTrainer);
+}
 
 function showLogin() {
   document.getElementById('login-view').classList.remove('d-none');
@@ -310,6 +151,7 @@ function showApp() {
   document.getElementById('app-view').classList.remove('d-none');
   const s = getSession();
   document.getElementById('user-chip').textContent = s ? `${s.name} · ${s.role}` : '';
+  updateLiveBadge();
   renderNav();
   goHome();
 }
@@ -327,10 +169,13 @@ function renderNav() {
   } else {
     bottomNav().innerHTML = `
       <a href="#" data-nav="home" class="active"><i class="bi bi-grid-1x2"></i>Home</a>
-      <a href="#" data-nav="catalog"><i class="bi bi-search"></i>Catalog</a>
+      <a href="#" data-nav="catalog"><i class=" conf bi-search"></i>Catalog</a>
       <a href="#" data-nav="mycourses"><i class="bi bi-journal-bookmark"></i>My courses</a>
       <a href="#" data-nav="about"><i class="bi bi-info-circle"></i>About</a>`;
   }
+  // fix typo if any
+  bottomNav().innerHTML = bottomNav().innerHTML.replace('conf bi-search', 'bi bi-search');
+
   bottomNav().querySelectorAll('[data-nav]').forEach((a) => {
     a.addEventListener('click', (e) => {
       e.preventDefault();
@@ -360,6 +205,7 @@ function setBack(handler) {
 }
 
 function goHome() {
+  currentView = { name: 'home' };
   const s = getSession();
   setBack(null);
   if (s.role === 'trainer') renderTrainerHome();
@@ -367,6 +213,7 @@ function goHome() {
 }
 
 function renderTrainerHome() {
+  currentView = { name: 'home' };
   const courses = getCourses();
   const enrolments = getEnrolments();
   const pending = enrolments.filter((e) => e.status === 'pending').length;
@@ -377,6 +224,7 @@ function renderTrainerHome() {
 
   content().innerHTML = `
     <h2 class="page-title">Trainer dashboard</h2>
+    <p class="text-secondary small mb-3">Sample data loaded · numbers update live when learners act in another tab</p>
     <div class="card-grid mb-3">
       <div class="stat-card"><div class="label">Courses</div><div class="value">${courses.length}</div></div>
       <div class="stat-card"><div class="label">Learners</div><div class="value">${learners.length}</div></div>
@@ -384,7 +232,8 @@ function renderTrainerHome() {
       <div class="stat-card"><div class="label">To grade</div><div class="value">${submissions.length}</div></div>
       <div class="stat-card"><div class="label">Avg progress</div><div class="value">${avg}%</div></div>
     </div>
-    ${pending ? `<div class="list-card" style="border-color:#eab308"><h3>Action needed</h3><p>${pending} enrolment request(s) waiting for approval. Open Approvals in the menu.</p></div>` : ''}
+    ${pending ? `<div class="list-card" style="border-color:#eab308"><h3>Action needed</h3><p>${pending} enrolment request(s) waiting. Open Approvals.</p></div>` : ''}
+    ${submissions.length ? `<div class="list-card" style="border-color:#2563eb"><h3>Submissions to grade</h3><p>${submissions.length} assignment(s) ready. Open Grade.</p></div>` : ''}
     <h3 class="h6 text-secondary mb-2">Courses</h3>
     ${courses
       .map(
@@ -407,6 +256,7 @@ function renderTrainerHome() {
 }
 
 function renderApprovals() {
+  currentView = { name: 'approvals' };
   setBack(null);
   const users = load(KEYS.users, []);
   const courses = getCourses();
@@ -414,7 +264,7 @@ function renderApprovals() {
 
   content().innerHTML = `
     <h2 class="page-title">Enrolment approvals</h2>
-    <p class="text-secondary mb-3">Approve or reject learner requests to join a course.</p>
+    <p class="text-secondary mb-3">Approve or reject learner requests. Updates appear live in other open tabs.</p>
     ${
       pending.length === 0
         ? '<div class="empty">No pending requests</div>'
@@ -448,14 +298,14 @@ function renderApprovals() {
   });
   content().querySelectorAll('[data-reject]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const list = getEnrolments().filter((x) => x.id !== btn.dataset.reject);
-      saveEnrolments(list);
+      saveEnrolments(getEnrolments().filter((x) => x.id !== btn.dataset.reject));
       renderApprovals();
     });
   });
 }
 
 function renderGrading() {
+  currentView = { name: 'grade' };
   setBack(null);
   const users = load(KEYS.users, []);
   const courses = getCourses();
@@ -464,7 +314,7 @@ function renderGrading() {
 
   content().innerHTML = `
     <h2 class="page-title">Grade submissions</h2>
-    <p class="text-secondary mb-3">Review learner assignments and award a mark.</p>
+    <p class="text-secondary mb-3">Sample submission included. New submissions from other tabs show here live.</p>
     ${
       toGrade.length === 0
         ? '<div class="empty">No submissions waiting</div>'
@@ -513,6 +363,7 @@ function escapeHtml(str) {
 }
 
 function renderLearnerHome() {
+  currentView = { name: 'home' };
   const s = getSession();
   setBack(null);
   const enrolled = getEnrolments().filter((e) => e.learnerId === s.id && e.status === 'approved');
@@ -521,14 +372,13 @@ function renderLearnerHome() {
 
   content().innerHTML = `
     <h2 class="page-title">My learning</h2>
-    ${pending.length ? `<div class="list-card mb-2"><h3>Pending approval</h3><p>You have ${pending.length} course request(s) waiting for a trainer.</p></div>` : ''}
+    ${pending.length ? `<div class="list-card mb-2"><h3>Pending approval</h3><p>${pending.length} request(s) waiting for a trainer.</p></div>` : ''}
     ${
       courses.length === 0
         ? '<div class="empty">No approved courses yet. Open <strong>Catalog</strong> to request enrolment.</div>'
         : courses
             .map((c) => {
               const p = getProgress(s.id, c.id);
-              const cert = p.percent >= 100;
               return `
           <div class="list-card" data-open-course="${c.id}">
             <h3>${c.title}</h3>
@@ -538,7 +388,7 @@ function renderLearnerHome() {
                 <div class="progress-bar" style="width:${p.percent}%"></div>
               </div>
               <span class="badge-soft">${p.percent}%</span>
-              ${cert ? '<span class="badge-soft badge-ok">Certificate ready</span>' : ''}
+              ${p.percent >= 100 ? '<span class="badge-soft badge-ok">Certificate ready</span>' : ''}
             </div>
           </div>`;
             })
@@ -551,13 +401,14 @@ function renderLearnerHome() {
 }
 
 function renderCatalog() {
+  currentView = { name: 'catalog' };
   setBack(null);
   const s = getSession();
   const courses = getCourses();
 
   content().innerHTML = `
     <h2 class="page-title">Course catalog</h2>
-    <p class="text-secondary mb-3">Request enrolment — a trainer must approve before you can start.</p>
+    <p class="text-secondary mb-3">Request enrolment — trainer approval required. Live for other tabs.</p>
     ${courses
       .map((c) => {
         const en = enrolmentFor(s.id, c.id);
@@ -596,6 +447,7 @@ function renderCatalog() {
 }
 
 function renderCourseDetail(courseId, asTrainer) {
+  currentView = { name: 'course', courseId, asTrainer };
   const course = getCourse(courseId);
   if (!course) return;
   const s = getSession();
@@ -637,16 +489,14 @@ function renderCourseDetail(courseId, asTrainer) {
 
   document.getElementById('btn-cert')?.addEventListener('click', () => renderCertificate(courseId));
 
-  content()
-    .querySelectorAll('[data-lesson]')
-    .forEach((el) => {
-      el.addEventListener('click', () => {
-        const lesson = course.lessons.find((l) => l.id === el.dataset.lesson);
-        if (lesson.type === 'quiz') renderQuiz(courseId, lesson, asTrainer);
-        else if (lesson.type === 'assignment') renderAssignment(courseId, lesson, asTrainer);
-        else renderLesson(courseId, lesson, asTrainer);
-      });
+  content().querySelectorAll('[data-lesson]').forEach((el) => {
+    el.addEventListener('click', () => {
+      const lesson = course.lessons.find((l) => l.id === el.dataset.lesson);
+      if (lesson.type === 'quiz') renderQuiz(courseId, lesson, asTrainer);
+      else if (lesson.type === 'assignment') renderAssignment(courseId, lesson, asTrainer);
+      else renderLesson(courseId, lesson, asTrainer);
     });
+  });
 }
 
 function renderCertificate(courseId) {
@@ -660,8 +510,7 @@ function renderCertificate(courseId) {
       <p class="mb-3">has successfully completed</p>
       <h3 class="mb-3">${course.title}</h3>
       <p class="text-secondary small mb-0">EduFlow LMS · ${new Date().toLocaleDateString('en-ZA')}</p>
-    </div>
-    <p class="text-secondary small text-center mt-3">Demo certificate for pilot use. Production can issue PDF certificates.</p>`;
+    </div>`;
 }
 
 function renderLesson(courseId, lesson, asTrainer) {
@@ -681,7 +530,7 @@ function renderLesson(courseId, lesson, asTrainer) {
     }`;
 
   document.getElementById('btn-complete')?.addEventListener('click', () => {
-    markLessonComplete(s.id, courseId, lesson.id);
+  markLessonComplete(s.id, courseId, lesson.id);
     renderCourseDetail(courseId, false);
   });
 }
@@ -692,18 +541,14 @@ function renderAssignment(courseId, lesson, asTrainer) {
   const asg = getAssignments().find((a) => a.id === lesson.assignmentId) || {
     id: lesson.assignmentId,
     instructions: lesson.body,
-    maxScore: 100,
   };
-  const subs = getSubmissions().filter(
-    (x) => x.assignmentId === asg.id && x.learnerId === (asTrainer ? x.learnerId : s.id)
-  );
   const mine = getSubmissions().find((x) => x.assignmentId === asg.id && x.learnerId === s.id);
 
   if (asTrainer) {
     content().innerHTML = `
       <h2 class="page-title">${lesson.title}</h2>
       <div class="content-block">${asg.instructions || lesson.body}</div>
-      <p class="text-secondary">Learners submit written work here. Grade them under <strong>Grade</strong> in the menu.</p>`;
+      <p class="text-secondary">Grade learner work under <strong>Grade</strong>.</p>`;
     return;
   }
 
@@ -731,13 +576,13 @@ function renderAssignment(courseId, lesson, asTrainer) {
     <h2 class="page-title">${lesson.title}</h2>
     <div class="content-block mb-3">${asg.instructions || lesson.body}</div>
     <label class="form-label">Your submission</label>
-    <textarea class="form-control mb-3" id="sub-text" rows="5" placeholder="Type your answer here..."></textarea>
+    <textarea class="form-control mb-3" id="sub-text" rows="5" placeholder="Type your answer..."></textarea>
     <button class="btn btn-primary w-100" id="btn-submit">Submit assignment</button>`;
 
   document.getElementById('btn-submit').addEventListener('click', () => {
     const text = document.getElementById('sub-text').value.trim();
     if (text.length < 20) {
-      alert('Please write a bit more before submitting (at least a few sentences).');
+      alert('Please write a bit more (a few sentences).');
       return;
     }
     const list = getSubmissions();
@@ -763,10 +608,8 @@ function renderQuiz(courseId, lesson, asTrainer) {
   if (asTrainer) {
     content().innerHTML = `
       <h2 class="page-title">${lesson.title}</h2>
-      <p class="text-secondary">Trainer preview — ${lesson.quiz.questions.length} questions, pass mark ${lesson.quiz.passMark}%.</p>
-      <ol class="content-block">
-        ${lesson.quiz.questions.map((q) => `<li class="mb-2">${q.q}</li>`).join('')}
-      </ol>`;
+      <p class="text-secondary">${lesson.quiz.questions.length} questions · pass ${lesson.quiz.passMark}%</p>
+      <ol class="content-block">${lesson.quiz.questions.map((q) => `<li class="mb-2">${q.q}</li>`).join('')}</ol>`;
     return;
   }
 
@@ -783,11 +626,8 @@ function renderQuiz(courseId, lesson, asTrainer) {
 
 function drawQuizQuestion() {
   const q = quizState.questions[quizState.index];
-  const n = quizState.index + 1;
-  const total = quizState.questions.length;
-
   content().innerHTML = `
-    <h2 class="page-title">Question ${n} of ${total}</h2>
+    <h2 class="page-title">Question ${quizState.index + 1} of ${quizState.questions.length}</h2>
     <p class="mb-3">${q.q}</p>
     ${q.options.map((opt, i) => `<button type="button" class="quiz-option" data-opt="${i}">${opt}</button>`).join('')}
     <button class="btn btn-primary w-100 mt-2" id="btn-next-q" disabled>Next</button>`;
@@ -840,15 +680,12 @@ function finishQuiz() {
       <div class="value">${score}%</div>
       <div class="mt-2">${passed ? '<span class="badge-soft badge-ok">Passed</span>' : '<span class="badge-soft badge-warn">Not passed</span>'}</div>
     </div>
-    <p class="text-secondary">Pass mark: ${quizState.passMark}% · Correct: ${correct}/${quizState.questions.length}</p>
     <button class="btn btn-primary w-100" id="btn-back-course">Back to course</button>`;
-
-  document.getElementById('btn-back-course').addEventListener('click', () => {
-    renderCourseDetail(quizState.courseId, false);
-  });
+  document.getElementById('btn-back-course').onclick = () => renderCourseDetail(quizState.courseId, false);
 }
 
 function renderReport() {
+  currentView = { name: 'report' };
   setBack(null);
   const users = load(KEYS.users, []);
   const courses = getCourses();
@@ -879,6 +716,7 @@ function renderReport() {
 
   content().innerHTML = `
     <h2 class="page-title">Progress report</h2>
+    <p class="text-secondary small mb-2">Live sample data — refreshes when other tabs change progress</p>
     <div class="content-block p-0 overflow-auto">
       <table class="table-dark-ef">
         <thead><tr><th>Learner</th><th>Course</th><th>Progress</th><th>Quiz</th><th>Assignment</th></tr></thead>
@@ -899,17 +737,20 @@ function renderReport() {
 }
 
 function renderAbout() {
+  currentView = { name: 'about' };
   setBack(null);
+  const mode = getLiveMode();
   content().innerHTML = `
     <h2 class="page-title">About EduFlow</h2>
     <div class="content-block">
-      <p class="mb-2"><strong>EduFlow LMS</strong></p>
-      <p class="mb-2 text-secondary">Pilot for training providers: catalogue, enrolment approval, lessons, quizzes, written assignments, grading, progress reports and completion certificates.</p>
-      <p class="mb-0 text-secondary small">Version 1.1.0 · Demo data is stored in this browser only.</p>
+      <p class="mb-2"><strong>EduFlow LMS</strong> · Version 1.2.0</p>
+      <p class="mb-2 text-secondary">Pilot demo with rich sample data, enrolment approval, quizzes, assignments, grading, reports and certificates.</p>
+      <p class="mb-0"><span class="badge-soft badge-ok">${mode === 'firebase' ? 'Cloud live mode' : 'Live tab-sync mode'}</span></p>
     </div>
     <div class="content-block">
-      <p class="mb-1"><strong>Going live for real students</strong></p>
-      <p class="text-secondary small mb-0">This demo runs on one device. For real multi-user enrolments you need a cloud backend (e.g. Firebase or Supabase). See the README in the GitHub repo for the go-live checklist.</p>
+      <p class="mb-1"><strong>How live updates work now</strong></p>
+      <p class="text-secondary small mb-2">Open two browser windows on this site. Log in as trainer in one and learner in the other. Approvals, submissions and progress update across tabs in real time.</p>
+      <p class="text-secondary small mb-0">For real students on different phones, connect Firebase (see js/firebase-config.js and README).</p>
     </div>
     <button class="btn btn-outline-light w-100" id="btn-reset">Reset demo data</button>`;
 
@@ -921,10 +762,13 @@ function renderAbout() {
   });
 }
 
-// ---------- Boot ----------
 document.addEventListener('DOMContentLoaded', () => {
   seedIfNeeded();
   setTimeout(() => document.getElementById('splash')?.classList.add('hide'), 900);
+
+  onLiveChange(() => {
+    if (getSession()) refreshCurrentView();
+  });
 
   document.getElementById('login-form')?.addEventListener('submit', (e) => {
     e.preventDefault();
