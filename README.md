@@ -1,56 +1,114 @@
 # EduFlow LMS
 
-Learning Management System demo for training providers.
+Learning Management System for training providers.
 
 **Live demo:** https://jlephoto23-collab.github.io/EduFlow-LMS/
 
-## Demo logins
+## Demo logins (local / tab-sync mode)
 
 | Role | Email | Password |
 |------|--------|----------|
 | Trainer | trainer@eduflow.test | trainer123 |
 | Learner | learner1@eduflow.test | learner123 |
 
-Or use **New learner? Create account** on the login screen.
+## Features
 
-## Features (pilot demo)
+- Trainer & learner roles
+- Course catalog + enrolment **request → approve/reject**
+- Lessons, quizzes, written assignments
+- Submissions + trainer grading
+- Progress reports + completion certificate
+- **Live tab-sync** (two browser windows update in real time)
+- **Firebase-ready** for real multi-device cloud mode
 
-- Trainer and learner roles
-- Course catalog
-- Learner requests enrolment → trainer approves/rejects
-- Lessons (content)
-- Quizzes with pass mark
-- Written assignments + submit
-- Trainer grades submissions
-- Progress % and reports
-- Completion certificate view
-- Reset demo data
+---
 
-## Important: demo vs live students
+## Firebase integration (real multi-user live)
 
-This version stores data in the **browser (localStorage)**. It is perfect for **pitches and single-device demos**.
+### Files
 
-It is **not** yet a multi-user live system: a student on another phone does not share the same database as the trainer.
+| File | Purpose |
+|------|---------|
+| `js/firebase-config.js` | Paste your Firebase web config here |
+| `js/firebase.js` | Auth + Firestore helpers, seed, security rules example |
+| `js/store.js` | localStorage + BroadcastChannel (demo mode) |
+| `js/app.js` | UI and flows |
 
-### To go live (real enrolments across devices)
+### When is Firebase used?
 
-1. Keep this UI.
-2. Add a free backend:
-   - **Firebase** (Auth + Firestore), or
-   - **Supabase** (Auth + Postgres)
-3. Replace `localStorage` in `js/app.js` with cloud read/write.
-4. Host the same files on GitHub Pages (or Netlify/Vercel).
-5. Optional: custom domain (e.g. learn.yourprovider.co.za).
+- **Config empty** → localStorage + live tab-sync (current demo)
+- **`projectId` set** → cloud mode (`js/firebase.js`); badge shows **Live cloud**
 
-### Suggested go-live phases
+### Step-by-step setup
 
-| Phase | Deliverable |
-|-------|-------------|
-| Pilot demo (now) | This app on GitHub Pages |
-| Phase 1 live | Firebase/Supabase auth + shared courses/enrolments |
-| Phase 2 | File uploads, email notifications, PDF certificates |
-| Phase 3 | Multi-campus admin, exports, integrations |
+1. Open [Firebase Console](https://console.firebase.google.com) → **Add project**.
+2. Project settings → **Add app** → **Web** (`</>`) → register app name (e.g. EduFlow).
+3. Copy the `firebaseConfig` object.
+4. Open `js/firebase-config.js` and paste values (uncomment all fields):
 
-## Pitch tip
+```js
+export const firebaseConfig = {
+  apiKey: "...",
+  authDomain: "...",
+  projectId: "...",
+  storageBucket: "...",
+  messagingSenderId: "...",
+  appId: "...",
+};
+```
 
-Demo the full path on one device (trainer approve → learner study → submit → grade → certificate), then explain Phase 1 live as the paid pilot setup.
+5. **Authentication** → Sign-in method → enable **Email/Password**.
+6. **Firestore Database** → Create database → start in **test mode** for pilot.
+7. Push the updated `firebase-config.js` to GitHub → hard-refresh the site.
+8. Create users:
+   - **Option A:** Authentication → Add user (email/password), then add a document in `users/{uid}` with `{ name, email, role: "trainer" | "learner" }`.
+   - **Option B:** Use **New learner? Create account** in the app (creates Auth user + `users` profile as learner). Promote one user to trainer in Firestore (`role: "trainer"`).
+9. Optional: in browser console after login as trainer, call seed from the integration module (or add a “Seed cloud sample” button later).
+
+### Firestore collections
+
+| Collection | Main fields |
+|------------|-------------|
+| `users` | name, email, role |
+| `courses` | title, description, category, trainerId, lessons[] |
+| `enrolments` | courseId, learnerId, status (`pending`\|`approved`), enrolledAt |
+| `progress` | learnerId, courseId, completedLessonIds[], percent |
+| `assignments` | courseId, lessonId, title, instructions, maxScore |
+| `submissions` | assignmentId, courseId, learnerId, text, status, score |
+| `attempts` | learnerId, courseId, lessonId, score, passed, at |
+
+### Security rules (pilot → production)
+
+Example rules are documented at the bottom of `js/firebase.js`.  
+**Test mode is fine for a private pilot only.** Before real students:
+
+- Require `request.auth != null`
+- Restrict course writes to trainers
+- Restrict submission updates to owner or trainer
+
+### Hosting
+
+GitHub Pages is enough for the frontend. Firebase only holds Auth + data.  
+Optional: Firebase Hosting instead of GitHub Pages.
+
+### Authorized domains
+
+Authentication → Settings → **Authorized domains** must include:
+
+- `localhost` (local testing)
+- `jlephoto23-collab.github.io`
+
+---
+
+## Modes compared
+
+| Mode | How | Multi-device | Best for |
+|------|-----|-------------|----------|
+| Tab-sync (default) | localStorage + BroadcastChannel | No (same browser profile) | Pitch demo |
+| Firebase | Auth + Firestore | Yes | Real students / paid pilot |
+
+---
+
+## Pitch wording
+
+> “The product is live on the web today with full sample data and real-time UI updates. Production Phase 1 connects the same app to Firebase so every learner and trainer shares one secure cloud database.”
