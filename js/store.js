@@ -1,7 +1,7 @@
 /**
- * EduFlow data store — NQF-aligned pilot programmes (original content).
- * SAQA IDs reference public register metadata only — not official learner guides.
- * Module credits are illustrative demo weights, not official unit-standard credits.
+ * EduFlow data store — NQF-aligned pilot programmes.
+ * SAQA IDs/titles are public register references only.
+ * Learning outcomes are original pilot wording — not official SAQA unit-standard text.
  */
 
 import { isFirebaseEnabled } from './firebase-config.js';
@@ -71,7 +71,7 @@ export function uid() {
 
 export function seedIfNeeded() {
   const ver = load('ef_seed_ver', 0);
-  if (ver >= 5 && load(KEYS.users, null)) return;
+  if (ver >= 6 && load(KEYS.users, null)) return;
 
   Object.values(KEYS).forEach((k) => localStorage.removeItem(k));
 
@@ -89,8 +89,6 @@ export function seedIfNeeded() {
     { id: 'u_l2', name: 'James Molefe', email: 'james.molefe@gmail.com', password: 'learner123', role: 'learner', gmail: 'james.molefe@gmail.com' },
     { id: 'u_l3', name: 'Naledi Khumalo', email: 'naledi.k@gmail.com', password: 'learner123', role: 'learner', gmail: 'naledi.k@gmail.com' },
   ];
-
-  const mkLessons = (prefix, bodies) => bodies;
 
   const courses = [
     {
@@ -111,18 +109,101 @@ export function seedIfNeeded() {
         'Use basic planning tools (task list, timeline, risk note)',
         'Submit a mini project plan for assessment',
       ],
+      unitStandards: [
+        { id: '120385', title: 'Apply a range of project management tools and techniques', nqfLevel: 4, credits: 7 },
+        { id: '120381', title: 'Implement project administration processes according to requirements', nqfLevel: 4, credits: 5 },
+      ],
       category: 'Project Management',
       trainerId: trainer.id,
       lessons: [
-        { id: 'pm_g1', title: 'Learner guide: What is a project?', type: 'guide', order: 1, nqfLevel: 4, credits: 4, body: 'A project is a temporary effort with a clear start and end, done to create a unique product, service or result. Unlike day-to-day operations, projects have defined scope, time and cost. At NQF Level 4 you learn to support project work: clarify goals, list tasks, track progress and report status.\n\nKey terms: scope (what is included), schedule (when), resources (who and what), risk (what could go wrong), stakeholder (anyone affected).\n\nActivity: Write down one workplace improvement that could be run as a short project (e.g. organising a team induction day).' },
-        { id: 'pm_m1', title: 'Module 1: Project life cycle', type: 'content', order: 2, nqfLevel: 4, credits: 8, body: 'Typical phases: (1) Initiation — agree the need and high-level goal. (2) Planning — break work into tasks, estimate time and resources. (3) Execution — do the work and communicate. (4) Monitoring — compare plan vs actual. (5) Closure — hand over, lessons learned.\n\nYour role may include updating task lists, booking venues, collecting status from team members and filing documents.' },
-        { id: 'pm_q1', title: 'Formative assessment: Project basics', type: 'quiz', order: 3, nqfLevel: 4, credits: 3, body: '', quiz: { passMark: 70, questions: [
-          { q: 'A project is best described as:', options: ['Ongoing daily operations', 'A temporary effort with a unique outcome', 'Only large construction work', 'Any meeting with a manager'], correctIndex: 1 },
-          { q: 'Scope means:', options: ['The project budget only', 'What is included and excluded in the work', 'The project manager\'s job title', 'The final celebration'], correctIndex: 1 },
-          { q: 'Which phase includes lessons learned?', options: ['Initiation', 'Planning', 'Execution', 'Closure'], correctIndex: 3 },
-        ] } },
-        { id: 'pm_m2', title: 'Module 2: Planning tools', type: 'content', order: 4, nqfLevel: 4, credits: 8, body: 'Simple tools you will use: work breakdown (list of tasks), Gantt-style timeline (tasks vs weeks), RACI (who is Responsible, Accountable, Consulted, Informed), and a risk register (risk, likelihood, impact, action).\n\nGood plans are clear enough that another team member can follow them without guessing.' },
-        { id: 'pm_a1', title: 'Summative assignment: Mini project plan', type: 'assignment', order: 5, nqfLevel: 4, credits: 10, body: 'Choose a simple workplace or community project. Submit: (1) project goal in one sentence, (2) list of at least 5 tasks, (3) who does each task, (4) one risk and how you would reduce it. Minimum one short paragraph per point.', assignmentId: 'asg_pm1' },
+        {
+          id: 'pm_g1',
+          title: 'Learner guide: What is a project?',
+          type: 'guide',
+          order: 1,
+          nqfLevel: 4,
+          credits: 4,
+          unitStandardId: '120381',
+          unitStandardTitle: 'Implement project administration processes according to requirements',
+          outcomes: [
+            'Define a project in workplace language',
+            'Identify scope, schedule, resources and stakeholders',
+            'Describe one simple workplace project idea',
+          ],
+          body: 'A project is a temporary effort with a clear start and end, done to create a unique product, service or result. Unlike day-to-day operations, projects have defined scope, time and cost. At NQF Level 4 you learn to support project work: clarify goals, list tasks, track progress and report status.\n\nKey terms: scope (what is included), schedule (when), resources (who and what), risk (what could go wrong), stakeholder (anyone affected).\n\nActivity: Write down one workplace improvement that could be run as a short project (e.g. organising a team induction day).',
+        },
+        {
+          id: 'pm_m1',
+          title: 'Module 1: Project life cycle',
+          type: 'content',
+          order: 2,
+          nqfLevel: 4,
+          credits: 8,
+          unitStandardId: '120381',
+          unitStandardTitle: 'Implement project administration processes according to requirements',
+          outcomes: [
+            'List the main phases of a simple project life cycle',
+            'Match support tasks to each phase',
+            'Explain why monitoring and closure matter',
+          ],
+          body: 'Typical phases: (1) Initiation — agree the need and high-level goal. (2) Planning — break work into tasks, estimate time and resources. (3) Execution — do the work and communicate. (4) Monitoring — compare plan vs actual. (5) Closure — hand over, lessons learned.\n\nYour role may include updating task lists, booking venues, collecting status from team members and filing documents.',
+        },
+        {
+          id: 'pm_q1',
+          title: 'Formative assessment: Project basics',
+          type: 'quiz',
+          order: 3,
+          nqfLevel: 4,
+          credits: 3,
+          unitStandardId: '120381',
+          unitStandardTitle: 'Implement project administration processes according to requirements',
+          outcomes: [
+            'Check understanding of project vs operations',
+            'Check understanding of scope and closure',
+          ],
+          body: '',
+          quiz: {
+            passMark: 70,
+            questions: [
+              { q: 'A project is best described as:', options: ['Ongoing daily operations', 'A temporary effort with a unique outcome', 'Only large construction work', 'Any meeting with a manager'], correctIndex: 1 },
+              { q: 'Scope means:', options: ['The project budget only', 'What is included and excluded in the work', 'The project manager job title', 'The final celebration'], correctIndex: 1 },
+              { q: 'Which phase includes lessons learned?', options: ['Initiation', 'Planning', 'Execution', 'Closure'], correctIndex: 3 },
+            ],
+          },
+        },
+        {
+          id: 'pm_m2',
+          title: 'Module 2: Planning tools',
+          type: 'content',
+          order: 4,
+          nqfLevel: 4,
+          credits: 8,
+          unitStandardId: '120385',
+          unitStandardTitle: 'Apply a range of project management tools and techniques',
+          outcomes: [
+            'Use a simple task breakdown for a small project',
+            'Explain timeline, RACI and risk register in plain language',
+            'Choose a tool that fits a given planning need',
+          ],
+          body: 'Simple tools you will use: work breakdown (list of tasks), Gantt-style timeline (tasks vs weeks), RACI (who is Responsible, Accountable, Consulted, Informed), and a risk register (risk, likelihood, impact, action).\n\nGood plans are clear enough that another team member can follow them without guessing.',
+        },
+        {
+          id: 'pm_a1',
+          title: 'Summative assignment: Mini project plan',
+          type: 'assignment',
+          order: 5,
+          nqfLevel: 4,
+          credits: 10,
+          unitStandardId: '120385',
+          unitStandardTitle: 'Apply a range of project management tools and techniques',
+          outcomes: [
+            'Produce a goal statement for a mini project',
+            'List tasks with owners',
+            'Record one risk and a mitigation action',
+          ],
+          body: 'Choose a simple workplace or community project. Submit: (1) project goal in one sentence, (2) list of at least 5 tasks, (3) who does each task, (4) one risk and how you would reduce it. Minimum one short paragraph per point.',
+          assignmentId: 'asg_pm1',
+        },
       ],
     },
     {
@@ -143,18 +224,102 @@ export function seedIfNeeded() {
         'Give fair, behaviour-focused feedback',
         'Prepare a short team briefing plan for assessment',
       ],
+      unitStandards: [
+        { id: '242821', title: 'Identify responsibilities of a team leader in ensuring that organisational standards are met', nqfLevel: 4, credits: 6 },
+        { id: '242819', title: 'Motivate and build a team', nqfLevel: 4, credits: 10 },
+        { id: '11473', title: 'Manage individual and team performance', nqfLevel: 4, credits: 8 },
+      ],
       category: 'Generic Management',
       trainerId: trainer.id,
       lessons: [
-        { id: 'gm_g1', title: 'Learner guide: Role of a supervisor', type: 'guide', order: 1, nqfLevel: 4, credits: 4, body: 'Supervisors turn organisational goals into daily work. You allocate tasks, support people, check quality and escalate problems early.\n\nCore skills: clear instruction, fair feedback, listening, basic planning, and modelling the behaviour you expect.\n\nReflection: Think of a good supervisor you have seen. List three behaviours that made them effective.' },
-        { id: 'gm_m1', title: 'Module 1: Planning and organising work', type: 'content', order: 2, nqfLevel: 4, credits: 8, body: 'Match tasks to skills and deadlines. Prioritise urgent vs important work. Confirm resources before you commit the team. Hold short stand-up or briefing sessions so everyone knows the plan for the day or week.' },
-        { id: 'gm_q1', title: 'Formative assessment: Supervision basics', type: 'quiz', order: 3, nqfLevel: 4, credits: 3, body: '', quiz: { passMark: 70, questions: [
-          { q: 'A supervisor\'s main focus is to:', options: ['Only do technical work alone', 'Translate goals into coordinated team work', 'Avoid all conflict', 'Ignore reporting lines'], correctIndex: 1 },
-          { q: 'When giving feedback you should:', options: ['Only criticise in public', 'Be specific, fair and focused on behaviour', 'Never document anything', 'Compare staff to each other harshly'], correctIndex: 1 },
-          { q: 'Escalating a problem means:', options: ['Hiding it until month-end', 'Raising it to the right person with facts', 'Blaming a colleague on social media', 'Stopping all work permanently'], correctIndex: 1 },
-        ] } },
-        { id: 'gm_m2', title: 'Module 2: Team communication', type: 'content', order: 4, nqfLevel: 4, credits: 8, body: 'Use the right channel: face-to-face for sensitive topics, written notes for instructions that must be kept, group chats for quick coordination. Confirm understanding by asking the person to repeat key points. Keep records of agreed actions.' },
-        { id: 'gm_a1', title: 'Summative assignment: Team briefing plan', type: 'assignment', order: 5, nqfLevel: 4, credits: 10, body: 'Write a short plan for a 15-minute team briefing: purpose, three agenda points, how you will check understanding, and one follow-up action you will track. Minimum 3–4 short paragraphs.', assignmentId: 'asg_gm1' },
+        {
+          id: 'gm_g1',
+          title: 'Learner guide: Role of a supervisor',
+          type: 'guide',
+          order: 1,
+          nqfLevel: 4,
+          credits: 4,
+          unitStandardId: '242821',
+          unitStandardTitle: 'Identify responsibilities of a team leader in ensuring that organisational standards are met',
+          outcomes: [
+            'Describe supervisor responsibilities in plain language',
+            'List behaviours that support team performance',
+            'Reflect on effective supervision examples',
+          ],
+          body: 'Supervisors turn organisational goals into daily work. You allocate tasks, support people, check quality and escalate problems early.\n\nCore skills: clear instruction, fair feedback, listening, basic planning, and modelling the behaviour you expect.\n\nReflection: Think of a good supervisor you have seen. List three behaviours that made them effective.',
+        },
+        {
+          id: 'gm_m1',
+          title: 'Module 1: Planning and organising work',
+          type: 'content',
+          order: 2,
+          nqfLevel: 4,
+          credits: 8,
+          unitStandardId: '242821',
+          unitStandardTitle: 'Identify responsibilities of a team leader in ensuring that organisational standards are met',
+          outcomes: [
+            'Prioritise urgent versus important work',
+            'Match tasks to skills and deadlines',
+            'Prepare a short team briefing structure',
+          ],
+          body: 'Match tasks to skills and deadlines. Prioritise urgent vs important work. Confirm resources before you commit the team. Hold short stand-up or briefing sessions so everyone knows the plan for the day or week.',
+        },
+        {
+          id: 'gm_q1',
+          title: 'Formative assessment: Supervision basics',
+          type: 'quiz',
+          order: 3,
+          nqfLevel: 4,
+          credits: 3,
+          unitStandardId: '11473',
+          unitStandardTitle: 'Manage individual and team performance',
+          outcomes: [
+            'Check understanding of supervisor focus',
+            'Check understanding of fair feedback and escalation',
+          ],
+          body: '',
+          quiz: {
+            passMark: 70,
+            questions: [
+              { q: 'A supervisor main focus is to:', options: ['Only do technical work alone', 'Translate goals into coordinated team work', 'Avoid all conflict', 'Ignore reporting lines'], correctIndex: 1 },
+              { q: 'When giving feedback you should:', options: ['Only criticise in public', 'Be specific, fair and focused on behaviour', 'Never document anything', 'Compare staff to each other harshly'], correctIndex: 1 },
+              { q: 'Escalating a problem means:', options: ['Hiding it until month-end', 'Raising it to the right person with facts', 'Blaming a colleague on social media', 'Stopping all work permanently'], correctIndex: 1 },
+            ],
+          },
+        },
+        {
+          id: 'gm_m2',
+          title: 'Module 2: Team communication',
+          type: 'content',
+          order: 4,
+          nqfLevel: 4,
+          credits: 8,
+          unitStandardId: '242819',
+          unitStandardTitle: 'Motivate and build a team',
+          outcomes: [
+            'Select an appropriate communication channel',
+            'Confirm understanding after instructions',
+            'Keep a simple record of agreed actions',
+          ],
+          body: 'Use the right channel: face-to-face for sensitive topics, written notes for instructions that must be kept, group chats for quick coordination. Confirm understanding by asking the person to repeat key points. Keep records of agreed actions.',
+        },
+        {
+          id: 'gm_a1',
+          title: 'Summative assignment: Team briefing plan',
+          type: 'assignment',
+          order: 5,
+          nqfLevel: 4,
+          credits: 10,
+          unitStandardId: '11473',
+          unitStandardTitle: 'Manage individual and team performance',
+          outcomes: [
+            'Write a clear briefing purpose',
+            'List agenda points and a check for understanding',
+            'Define one follow-up action to track',
+          ],
+          body: 'Write a short plan for a 15-minute team briefing: purpose, three agenda points, how you will check understanding, and one follow-up action you will track. Minimum 3–4 short paragraphs.',
+          assignmentId: 'asg_gm1',
+        },
       ],
     },
     {
@@ -175,24 +340,108 @@ export function seedIfNeeded() {
         'Apply basic customer and telephone etiquette',
         'Submit a meeting-confirmation email for assessment',
       ],
+      unitStandards: [
+        { id: '110009', title: 'Manage administration records', nqfLevel: 4, credits: 4 },
+        { id: '110021', title: 'Achieve personal effectiveness in business environment', nqfLevel: 4, credits: 6 },
+        { id: '13929', title: 'Co-ordinate meetings, minor events and travel arrangements', nqfLevel: 3, credits: 3 },
+      ],
       category: 'Business Administration',
       trainerId: trainer.id,
       lessons: [
-        { id: 'ba_g1', title: 'Learner guide: Admin in the workplace', type: 'guide', order: 1, nqfLevel: 4, credits: 4, body: 'Business administration keeps information, people and processes organised. Typical duties: diaries, correspondence, filing, data entry, meeting support and basic reports.\n\nQuality admin is accurate, confidential and on time. Errors in records can affect payroll, customers and compliance.\n\nTip: Create a daily checklist for recurring tasks so nothing is forgotten under pressure.' },
-        { id: 'ba_m1', title: 'Module 1: Professional documents', type: 'content', order: 2, nqfLevel: 4, credits: 8, body: 'Emails and letters need a clear subject, polite greeting, short paragraphs and a professional close. Use spell-check. Save final versions in the correct folder with a sensible file name (date + topic).' },
-        { id: 'ba_q1', title: 'Formative assessment: Admin practice', type: 'quiz', order: 3, nqfLevel: 4, credits: 3, body: '', quiz: { passMark: 70, questions: [
-          { q: 'A good email subject line is:', options: ['Hi', 'Urgent!!!', 'Clear and specific about the topic', 'Empty'], correctIndex: 2 },
-          { q: 'Confidential documents should be:', options: ['Shared on public social media', 'Stored and shared only with authorised people', 'Left on the printer', 'Emailed to everyone in the company'], correctIndex: 1 },
-          { q: 'Meeting minutes should mainly capture:', options: ['Jokes only', 'Decisions, actions, owners and deadlines', 'Every word spoken', 'Personal opinions about colleagues'], correctIndex: 1 },
-        ] } },
-        { id: 'ba_m2', title: 'Module 2: Customer and telephone skills', type: 'content', order: 4, nqfLevel: 4, credits: 8, body: 'Greet clearly, use the organisation\'s name, listen fully before responding, and agree a next step. Note the caller\'s name and reference number. If you cannot help, transfer with a brief summary so the customer does not repeat everything.' },
-        { id: 'ba_a1', title: 'Summative assignment: Professional email', type: 'assignment', order: 5, nqfLevel: 4, credits: 10, body: 'A client asks for confirmation of a meeting next Tuesday at 10:00, venue Boardroom B, and a one-page agenda. Write the full email you would send (subject line + body).', assignmentId: 'asg_ba1' },
+        {
+          id: 'ba_g1',
+          title: 'Learner guide: Admin in the workplace',
+          type: 'guide',
+          order: 1,
+          nqfLevel: 4,
+          credits: 4,
+          unitStandardId: '110009',
+          unitStandardTitle: 'Manage administration records',
+          outcomes: [
+            'Describe typical admin duties in an office',
+            'Explain why accuracy and confidentiality matter',
+            'Suggest a simple daily checklist for recurring tasks',
+          ],
+          body: 'Business administration keeps information, people and processes organised. Typical duties: diaries, correspondence, filing, data entry, meeting support and basic reports.\n\nQuality admin is accurate, confidential and on time. Errors in records can affect payroll, customers and compliance.\n\nTip: Create a daily checklist for recurring tasks so nothing is forgotten under pressure.',
+        },
+        {
+          id: 'ba_m1',
+          title: 'Module 1: Professional documents',
+          type: 'content',
+          order: 2,
+          nqfLevel: 4,
+          credits: 8,
+          unitStandardId: '110021',
+          unitStandardTitle: 'Achieve personal effectiveness in business environment',
+          outcomes: [
+            'Structure a professional email',
+            'Use a clear subject line and closing',
+            'Apply sensible file naming for final documents',
+          ],
+          body: 'Emails and letters need a clear subject, polite greeting, short paragraphs and a professional close. Use spell-check. Save final versions in the correct folder with a sensible file name (date + topic).',
+        },
+        {
+          id: 'ba_q1',
+          title: 'Formative assessment: Admin practice',
+          type: 'quiz',
+          order: 3,
+          nqfLevel: 4,
+          credits: 3,
+          unitStandardId: '110009',
+          unitStandardTitle: 'Manage administration records',
+          outcomes: [
+            'Check understanding of professional email practice',
+            'Check understanding of confidentiality and minutes',
+          ],
+          body: '',
+          quiz: {
+            passMark: 70,
+            questions: [
+              { q: 'A good email subject line is:', options: ['Hi', 'Urgent!!!', 'Clear and specific about the topic', 'Empty'], correctIndex: 2 },
+              { q: 'Confidential documents should be:', options: ['Shared on public social media', 'Stored and shared only with authorised people', 'Left on the printer', 'Emailed to everyone in the company'], correctIndex: 1 },
+              { q: 'Meeting minutes should mainly capture:', options: ['Jokes only', 'Decisions, actions, owners and deadlines', 'Every word spoken', 'Personal opinions about colleagues'], correctIndex: 1 },
+            ],
+          },
+        },
+        {
+          id: 'ba_m2',
+          title: 'Module 2: Customer and telephone skills',
+          type: 'content',
+          order: 4,
+          nqfLevel: 4,
+          credits: 8,
+          unitStandardId: '110021',
+          unitStandardTitle: 'Achieve personal effectiveness in business environment',
+          outcomes: [
+            'Greet and identify the organisation clearly',
+            'Listen fully before responding',
+            'Hand over a call with a short summary',
+          ],
+          body: 'Greet clearly, use the organisation name, listen fully before responding, and agree a next step. Note the caller name and reference number. If you cannot help, transfer with a brief summary so the customer does not repeat everything.',
+        },
+        {
+          id: 'ba_a1',
+          title: 'Summative assignment: Professional email',
+          type: 'assignment',
+          order: 5,
+          nqfLevel: 4,
+          credits: 10,
+          unitStandardId: '13929',
+          unitStandardTitle: 'Co-ordinate meetings, minor events and travel arrangements',
+          outcomes: [
+            'Write a complete meeting confirmation email',
+            'Include date, time, venue and agenda request',
+            'Use a professional tone and structure',
+          ],
+          body: 'A client asks for confirmation of a meeting next Tuesday at 10:00, venue Boardroom B, and a one-page agenda. Write the full email you would send (subject line + body).',
+          assignmentId: 'asg_ba1',
+        },
       ],
     },
   ];
 
   const assignments = [
-    { id: 'asg_pm1', courseId: 'c_pm4', lessonId: 'pm_a1', title: 'Summative assignment: Mini project plan', instructions: 'Submit: goal, 5+ tasks, owners, one risk and mitigation. One short paragraph per point minimum.', maxScore: 100 },
+    { id: 'asg_pm1', courseId: 'c_pm4', lessonId: 'pm_a1', title: 'Summative assignment: Mini project plan', instructions: 'Submit: goal, 5+ tasks, owners, one risk and mitigation.', maxScore: 100 },
     { id: 'asg_gm1', courseId: 'c_gm4', lessonId: 'gm_a1', title: 'Summative assignment: Team briefing plan', instructions: 'Purpose, three agenda points, check of understanding, one follow-up action.', maxScore: 100 },
     { id: 'asg_ba1', courseId: 'c_ba4', lessonId: 'ba_a1', title: 'Summative assignment: Professional email', instructions: 'Full email confirming meeting with subject line and body.', maxScore: 100 },
   ];
@@ -219,5 +468,5 @@ export function seedIfNeeded() {
   save(KEYS.attempts, [], { silent: true });
   save(KEYS.applications, [], { silent: true });
   save(KEYS.messages, messages, { silent: true });
-  save('ef_seed_ver', 5, { silent: true });
+  save('ef_seed_ver', 6, { silent: true });
 }
