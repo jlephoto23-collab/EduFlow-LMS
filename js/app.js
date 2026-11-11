@@ -17,12 +17,24 @@ function setSession(user) {
     localStorage.removeItem(KEYS.session);
     return;
   }
-  save(KEYS.session, { id: user.id, name: user.name, email: user.email, role: user.role }, { silent: true });
+  save(
+    KEYS.session,
+    {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      gmail: user.gmail || user.email,
+    },
+    { silent: true }
+  );
 }
 
 function login(email, password) {
   const users = load(KEYS.users, []);
-  const user = users.find((u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
+  const user = users.find(
+    (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password
+  );
   if (!user) return { ok: false, message: 'Invalid email or password' };
   setSession(user);
   return { ok: true, user };
@@ -30,12 +42,38 @@ function login(email, password) {
 
 function registerLearner(name, email, password) {
   const users = load(KEYS.users, []);
-  if (users.some((u) => u.email.toLowerCase() === email.toLowerCase())) {
+  const em = email.trim().toLowerCase();
+  if (!em.includes('@')) return { ok: false, message: 'Enter a valid email (Gmail preferred)' };
+  if (users.some((u) => u.email.toLowerCase() === em)) {
     return { ok: false, message: 'Email already registered' };
   }
-  const user = { id: uid(), name, email, password, role: 'learner' };
+  const user = {
+    id: uid(),
+    name: name.trim(),
+    email: em,
+    password,
+    role: 'learner',
+    gmail: em,
+  };
   users.push(user);
   save(KEYS.users, users);
+
+  // Welcome message to their Gmail-linked inbox in-app
+  const messages = load(KEYS.messages, []);
+  messages.unshift({
+    id: uid(),
+    toUserId: user.id,
+    toEmail: em,
+    subject: 'Welcome — communications linked to your email',
+    body:
+      'Your EduFlow account is linked to ' +
+      em +
+      '. The training provider will use this address for enrolment decisions, assessment results and notices. Check Messages in the app and your Gmail inbox in production.',
+    at: new Date().toISOString(),
+    read: false,
+  });
+  save(KEYS.messages, messages);
+
   setSession(user);
   return { ok: true, user };
 }
@@ -98,7 +136,32 @@ function enrolmentFor(learnerId, courseId) {
   return getEnrolments().find((e) => e.learnerId === learnerId && e.courseId === courseId);
 }
 
-// ---------- UI / live ----------
+function pushMessage(toUserId, toEmail, subject, body) {
+  const messages = load(KEYS.messages, []);
+  messages.unshift({
+    id: uid(),
+    toUserId,
+    toEmail,
+    subject,
+    body,
+    at: new Date().toISOString(),
+    read: false,
+  });
+  save(KEYS.messages, messages);
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&')
+    .replace(/</g, '<')
+    .replace(/>/g, '>');
+}
+
+function formatBody(text) {
+  return escapeHtml(text).replace(/\n/g, '<br>');
+}
+
+// ---------- UI ----------
 let quizState = null;
 let currentView = { name: 'home' };
 
@@ -109,15 +172,8 @@ const btnBack = () => document.getElementById('btn-back');
 function updateLiveBadge() {
   const el = document.getElementById('live-badge');
   if (!el) return;
-  const mode = getLiveMode();
-  if (mode === 'firebase') {
-    el.textContent = '● Live cloud';
-    el.className = 'live-badge on';
-  } else {
-    el.textContent = '● Live sync';
-    el.className = 'live-badge on';
-    el.title = 'Real-time updates across browser tabs on this device';
-  }
+  el.textContent = getLiveMode() === 'firebase' ? '● Live cloud' : '● Live sync';
+  el.className = 'live-badge on';
 }
 
 function flashLive() {
@@ -136,8 +192,10 @@ function refreshCurrentView() {
   else if (n === 'grade') renderGrading();
   else if (n === 'report') renderReport();
   else if (n === 'catalog') renderCatalog();
+  else if (n === 'results') renderResults();
+  else if (n === 'messages') renderMessages();
   else if (n === 'about') renderAbout();
-  else if (n === 'course' && currentView.courseId != null)
+  else if (n === 'course' && currentView.courseId)
     renderCourseDetail(currentView.courseId, currentView.asTrainer);
 }
 
@@ -165,17 +223,15 @@ function renderNav() {
       <a href="#" data-nav="approvals"><i class="bi bi-person-check"></i>Approvals</a>
       <a href="#" data-nav="grade"><i class="bi bi-pencil-square"></i>Grade</a>
       <a href="#" data-nav="report"><i class="bi bi-graph-up"></i>Reports</a>
-      <a href="#" data-nav="about"><i class="bi bi-info-circle"></i>About</a>`;
+      <a href="#" data-nav="about"><i class="bi bi-info-circle"></i>More</a>`;
   } else {
     bottomNav().innerHTML = `
       <a href="#" data-nav="home" class="active"><i class="bi bi-grid-1x2"></i>Home</a>
-      <a href="#" data-nav="catalog"><i class=" conf bi-search"></i>Catalog</a>
-      <a href="#" data-nav="mycourses"><i class="bi bi-journal-bookmark"></i>My courses</a>
-      <a href="#" data-nav="about"><i class="bi bi-info-circle"></i>About</a>`;
+      <a href="#" data-nav="catalog"><i class="bi bi-journal-plus"></i>Courses</a>
+      <a href="#" data-nav="results"><i class="bi bi-clipboard-check"></i>Results</a>
+      <a href="#" data-nav="messages"><i class="bi bi-envelope"></i>Inbox</a>
+      <a href="#" data-nav="about"><i class="bi bi-info-circle"></i>More</a>`;
   }
-  // fix typo if any
-  bottomNav().innerHTML = bottomNav().innerHTML.replace('conf bi-search', 'bi bi-search');
-
   bottomNav().querySelectorAll('[data-nav]').forEach((a) => {
     a.addEventListener('click', (e) => {
       e.preventDefault();
@@ -185,7 +241,8 @@ function renderNav() {
       if (n === 'grade') renderGrading();
       if (n === 'report') renderReport();
       if (n === 'catalog') renderCatalog();
-      if (n === 'mycourses') renderLearnerHome();
+      if (n === 'results') renderResults();
+      if (n === 'messages') renderMessages();
       if (n === 'about') renderAbout();
       bottomNav().querySelectorAll('a').forEach((x) => x.classList.remove('active'));
       a.classList.add('active');
@@ -219,22 +276,18 @@ function renderTrainerHome() {
   const pending = enrolments.filter((e) => e.status === 'pending').length;
   const submissions = getSubmissions().filter((s) => s.status === 'submitted');
   const learners = load(KEYS.users, []).filter((u) => u.role === 'learner');
-  const progress = getProgressAll();
-  const avg = progress.length === 0 ? 0 : Math.round(progress.reduce((a, p) => a + p.percent, 0) / progress.length);
 
   content().innerHTML = `
-    <h2 class="page-title">Trainer dashboard</h2>
-    <p class="text-secondary small mb-3">Sample data loaded · numbers update live when learners act in another tab</p>
+    <h2 class="page-title">Administrator dashboard</h2>
+    <p class="text-secondary small mb-3">Manage applications, course access, assessments and results. Notices go to each learner’s linked Gmail.</p>
     <div class="card-grid mb-3">
-      <div class="stat-card"><div class="label">Courses</div><div class="value">${courses.length}</div></div>
+      <div class="stat-card"><div class="label">Programmes</div><div class="value">${courses.length}</div></div>
       <div class="stat-card"><div class="label">Learners</div><div class="value">${learners.length}</div></div>
-      <div class="stat-card"><div class="label">Pending approvals</div><div class="value">${pending}</div></div>
+      <div class="stat-card"><div class="label">Pending access</div><div class="value">${pending}</div></div>
       <div class="stat-card"><div class="label">To grade</div><div class="value">${submissions.length}</div></div>
-      <div class="stat-card"><div class="label">Avg progress</div><div class="value">${avg}%</div></div>
     </div>
-    ${pending ? `<div class="list-card" style="border-color:#eab308"><h3>Action needed</h3><p>${pending} enrolment request(s) waiting. Open Approvals.</p></div>` : ''}
-    ${submissions.length ? `<div class="list-card" style="border-color:#2563eb"><h3>Submissions to grade</h3><p>${submissions.length} assignment(s) ready. Open Grade.</p></div>` : ''}
-    <h3 class="h6 text-secondary mb-2">Courses</h3>
+    ${pending ? `<div class="list-card" style="border-color:#eab308"><h3>Applications / enrolment requests</h3><p>${pending} waiting. Open Approvals to grant course access.</p></div>` : ''}
+    <h3 class="h6 text-secondary mb-2">NQF programmes</h3>
     ${courses
       .map(
         (c) => `
@@ -242,8 +295,8 @@ function renderTrainerHome() {
         <h3>${c.title}</h3>
         <p>${c.description}</p>
         <div class="meta">
-          <span class="badge-soft">${c.category}</span>
-          <span class="badge-soft">${c.lessons.length} lessons</span>
+          <span class="badge-soft">NQF ${c.nqfLevel || 4}</span>
+          <span class="badge-soft">${c.lessons.length} modules</span>
           <span class="badge-soft">${enrolments.filter((e) => e.courseId === c.id && e.status === 'approved').length} enrolled</span>
         </div>
       </div>`
@@ -252,7 +305,9 @@ function renderTrainerHome() {
 
   content()
     .querySelectorAll('[data-open-course]')
-    .forEach((el) => el.addEventListener('click', () => renderCourseDetail(el.dataset.openCourse, true)));
+    .forEach((el) =>
+      el.addEventListener('click', () => renderCourseDetail(el.dataset.openCourse, true))
+    );
 }
 
 function renderApprovals() {
@@ -263,8 +318,8 @@ function renderApprovals() {
   const pending = getEnrolments().filter((e) => e.status === 'pending');
 
   content().innerHTML = `
-    <h2 class="page-title">Enrolment approvals</h2>
-    <p class="text-secondary mb-3">Approve or reject learner requests. Updates appear live in other open tabs.</p>
+    <h2 class="page-title">Applications & access</h2>
+    <p class="text-secondary mb-3">Approve course access. Learner is notified on their linked Gmail address (in-app inbox + production email).</p>
     ${
       pending.length === 0
         ? '<div class="empty">No pending requests</div>'
@@ -275,9 +330,9 @@ function renderApprovals() {
               return `
           <div class="list-card">
             <h3>${learner?.name || 'Learner'}</h3>
-            <p>${course?.title || 'Course'} · ${learner?.email || ''}</p>
+            <p>${course?.title || 'Course'}<br><span class="text-secondary">Gmail: ${learner?.gmail || learner?.email || ''}</span></p>
             <div class="meta mt-2 gap-2">
-              <button class="btn btn-sm btn-primary" data-approve="${e.id}">Approve</button>
+              <button class="btn btn-sm btn-primary" data-approve="${e.id}">Approve access</button>
               <button class="btn btn-sm btn-outline-light" data-reject="${e.id}">Reject</button>
             </div>
           </div>`;
@@ -289,16 +344,41 @@ function renderApprovals() {
     btn.addEventListener('click', () => {
       const list = getEnrolments();
       const row = list.find((x) => x.id === btn.dataset.approve);
-      if (row) {
-        row.status = 'approved';
-        saveEnrolments(list);
+      if (!row) return;
+      row.status = 'approved';
+      saveEnrolments(list);
+      const learner = load(KEYS.users, []).find((u) => u.id === row.learnerId);
+      const course = getCourse(row.courseId);
+      if (learner) {
+        pushMessage(
+          learner.id,
+          learner.gmail || learner.email,
+          'Course access approved: ' + (course?.title || ''),
+          'You now have access to modules, learner guides and assessments for ' +
+            (course?.title || 'your course') +
+            '. Open My learning to start.'
+        );
       }
       renderApprovals();
     });
   });
   content().querySelectorAll('[data-reject]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      saveEnrolments(getEnrolments().filter((x) => x.id !== btn.dataset.reject));
+      const list = getEnrolments();
+      const row = list.find((x) => x.id === btn.dataset.reject);
+      if (row) {
+        const learner = load(KEYS.users, []).find((u) => u.id === row.learnerId);
+        const course = getCourse(row.courseId);
+        if (learner) {
+          pushMessage(
+            learner.id,
+            learner.gmail || learner.email,
+            'Course request update',
+            'Your request for ' + (course?.title || 'a course') + ' was not approved. Contact your training provider if you need help.'
+          );
+        }
+      }
+      saveEnrolments(list.filter((x) => x.id !== btn.dataset.reject));
       renderApprovals();
     });
   });
@@ -313,8 +393,8 @@ function renderGrading() {
   const toGrade = getSubmissions().filter((s) => s.status === 'submitted');
 
   content().innerHTML = `
-    <h2 class="page-title">Grade submissions</h2>
-    <p class="text-secondary mb-3">Sample submission included. New submissions from other tabs show here live.</p>
+    <h2 class="page-title">Grade assessments</h2>
+    <p class="text-secondary mb-3">Mark written work. Results are stored in the app and sent to the learner’s linked Gmail notice.</p>
     ${
       toGrade.length === 0
         ? '<div class="empty">No submissions waiting</div>'
@@ -326,11 +406,11 @@ function renderGrading() {
               return `
           <div class="list-card">
             <h3>${asg?.title || 'Assignment'}</h3>
-            <p>${learner?.name || ''} · ${course?.title || ''}</p>
+            <p>${learner?.name || ''} · ${course?.title || ''}<br><span class="text-secondary">${learner?.gmail || ''}</span></p>
             <div class="content-block mt-2 mb-2" style="font-size:.9rem">${escapeHtml(sub.text)}</div>
-            <div class="d-flex gap-2 align-items-center">
+            <div class="d-flex gap-2 align-items-center flex-wrap">
               <input type="number" class="form-control form-control-sm" style="max-width:100px" min="0" max="100" value="75" id="score-${sub.id}">
-              <button class="btn btn-sm btn-primary" data-grade="${sub.id}">Save grade</button>
+              <button class="btn btn-sm btn-primary" data-grade="${sub.id}">Save result</button>
             </div>
           </div>`;
             })
@@ -350,16 +430,18 @@ function renderGrading() {
       saveSubmissions(list);
       const asg = getAssignments().find((a) => a.id === sub.assignmentId);
       if (asg) markLessonComplete(sub.learnerId, sub.courseId, asg.lessonId);
+      const learner = load(KEYS.users, []).find((u) => u.id === sub.learnerId);
+      if (learner) {
+        pushMessage(
+          learner.id,
+          learner.gmail || learner.email,
+          'Assessment result: ' + (asg?.title || 'Assignment'),
+          'Your mark is ' + score + '%. Open Results in EduFlow to view all scores.'
+        );
+      }
       renderGrading();
     });
   });
-}
-
-function escapeHtml(str) {
-  return String(str)
-    .replace(/&/g, '&')
-    .replace(/</g, '<')
-    .replace(/>/g, '>');
 }
 
 function renderLearnerHome() {
@@ -369,13 +451,16 @@ function renderLearnerHome() {
   const enrolled = getEnrolments().filter((e) => e.learnerId === s.id && e.status === 'approved');
   const pending = getEnrolments().filter((e) => e.learnerId === s.id && e.status === 'pending');
   const courses = getCourses().filter((c) => enrolled.some((e) => e.courseId === c.id));
+  const unread = load(KEYS.messages, []).filter((m) => m.toUserId === s.id && !m.read).length;
 
   content().innerHTML = `
     <h2 class="page-title">My learning</h2>
-    ${pending.length ? `<div class="list-card mb-2"><h3>Pending approval</h3><p>${pending.length} request(s) waiting for a trainer.</p></div>` : ''}
+    <p class="text-secondary small mb-2">Linked Gmail: <strong>${s.gmail || s.email}</strong> · used for provider communications</p>
+    ${unread ? `<div class="list-card mb-2" style="border-color:#2563eb"><h3>Inbox</h3><p>${unread} new message(s) from your training provider.</p></div>` : ''}
+    ${pending.length ? `<div class="list-card mb-2"><h3>Pending application</h3><p>${pending.length} course request(s) awaiting administrator approval.</p></div>` : ''}
     ${
       courses.length === 0
-        ? '<div class="empty">No approved courses yet. Open <strong>Catalog</strong> to request enrolment.</div>'
+        ? '<div class="empty">Choose a programme under <strong>Courses</strong> to apply for access to modules, guides and assessments.</div>'
         : courses
             .map((c) => {
               const p = getProgress(s.id, c.id);
@@ -388,7 +473,7 @@ function renderLearnerHome() {
                 <div class="progress-bar" style="width:${p.percent}%"></div>
               </div>
               <span class="badge-soft">${p.percent}%</span>
-              ${p.percent >= 100 ? '<span class="badge-soft badge-ok">Certificate ready</span>' : ''}
+              ${p.percent >= 100 ? '<span class="badge-soft badge-ok">Complete</span>' : ''}
             </div>
           </div>`;
             })
@@ -397,7 +482,9 @@ function renderLearnerHome() {
 
   content()
     .querySelectorAll('[data-open-course]')
-    .forEach((el) => el.addEventListener('click', () => renderCourseDetail(el.dataset.openCourse, false)));
+    .forEach((el) =>
+      el.addEventListener('click', () => renderCourseDetail(el.dataset.openCourse, false))
+    );
 }
 
 function renderCatalog() {
@@ -407,21 +494,22 @@ function renderCatalog() {
   const courses = getCourses();
 
   content().innerHTML = `
-    <h2 class="page-title">Course catalog</h2>
-    <p class="text-secondary mb-3">Request enrolment — trainer approval required. Live for other tabs.</p>
+    <h2 class="page-title">Choose your course</h2>
+    <p class="text-secondary mb-3">Select the NQF programme you want to study. An administrator must approve access before modules unlock.</p>
     ${courses
       .map((c) => {
         const en = enrolmentFor(s.id, c.id);
-        let action = `<button class="btn btn-sm btn-primary" data-request="${c.id}">Request enrolment</button>`;
-        if (en?.status === 'approved') action = `<span class="badge-soft badge-ok">Enrolled</span>`;
-        if (en?.status === 'pending') action = `<span class="badge-soft badge-warn">Pending approval</span>`;
+        let action = `<button class="btn btn-sm btn-primary" data-request="${c.id}">Apply for this course</button>`;
+        if (en?.status === 'approved') action = `<span class="badge-soft badge-ok">Access granted</span>`;
+        if (en?.status === 'pending') action = `<span class="badge-soft badge-warn">Application pending</span>`;
         return `
         <div class="list-card">
           <h3>${c.title}</h3>
           <p>${c.description}</p>
           <div class="meta">
+            <span class="badge-soft">NQF ${c.nqfLevel || 4}</span>
             <span class="badge-soft">${c.category}</span>
-            <span class="badge-soft">${c.lessons.length} lessons</span>
+            <span class="badge-soft">${c.lessons.length} items</span>
             ${action}
           </div>
         </div>`;
@@ -441,9 +529,88 @@ function renderCatalog() {
         enrolledAt: new Date().toISOString(),
       });
       saveEnrolments(list);
+      const course = getCourse(courseId);
+      pushMessage(
+        s.id,
+        s.gmail || s.email,
+        'Application received: ' + (course?.title || ''),
+        'We received your application. You will be notified on this Gmail when an administrator approves access to modules and assessments.'
+      );
       renderCatalog();
     });
   });
+}
+
+function renderResults() {
+  currentView = { name: 'results' };
+  setBack(null);
+  const s = getSession();
+  const attempts = load(KEYS.attempts, []).filter((a) => a.learnerId === s.id);
+  const subs = getSubmissions().filter((x) => x.learnerId === s.id);
+  const courses = getCourses();
+
+  content().innerHTML = `
+    <h2 class="page-title">My results</h2>
+    <p class="text-secondary mb-3">Quiz and assignment results. Notices are also filed to your linked Gmail (${s.gmail || s.email}).</p>
+    <h3 class="h6 text-secondary">Quizzes</h3>
+    ${
+      attempts.length
+        ? `<div class="content-block p-0 overflow-auto"><table class="table-dark-ef"><thead><tr><th>Course</th><th>Score</th><th>Result</th></tr></thead><tbody>
+        ${attempts
+          .map((a) => {
+            const c = courses.find((x) => x.id === a.courseId);
+            return `<tr><td>${c?.title || a.courseId}</td><td>${a.score}%</td><td>${a.passed ? 'Pass' : 'Not yet'}</td></tr>`;
+          })
+          .join('')}
+        </tbody></table></div>`
+        : '<p class="text-secondary small">No quiz attempts yet.</p>'
+    }
+    <h3 class="h6 text-secondary mt-3">Assignments</h3>
+    ${
+      subs.length
+        ? `<div class="content-block p-0 overflow-auto"><table class="table-dark-ef"><thead><tr><th>Task</th><th>Status</th><th>Mark</th></tr></thead><tbody>
+        ${subs
+          .map((sub) => {
+            const asg = getAssignments().find((a) => a.id === sub.assignmentId);
+            return `<tr><td>${asg?.title || 'Assignment'}</td><td>${sub.status}</td><td>${sub.score != null ? sub.score + '%' : '—'}</td></tr>`;
+          })
+          .join('')}
+        </tbody></table></div>`
+        : '<p class="text-secondary small">No submissions yet.</p>'
+    }`;
+}
+
+function renderMessages() {
+  currentView = { name: 'messages' };
+  setBack(null);
+  const s = getSession();
+  const messages = load(KEYS.messages, []).filter((m) => m.toUserId === s.id);
+
+  // mark read
+  const all = load(KEYS.messages, []);
+  all.forEach((m) => {
+    if (m.toUserId === s.id) m.read = true;
+  });
+  save(KEYS.messages, all, { silent: true });
+
+  content().innerHTML = `
+    <h2 class="page-title">Inbox</h2>
+    <p class="text-secondary mb-3">Provider communications linked to <strong>${s.gmail || s.email}</strong>. In production these also go to Gmail.</p>
+    ${
+      messages.length === 0
+        ? '<div class="empty">No messages yet</div>'
+        : messages
+            .map(
+              (m) => `
+      <div class="list-card">
+        <h3>${escapeHtml(m.subject)}</h3>
+        <p class="text-secondary small">${new Date(m.at).toLocaleString('en-ZA')}</p>
+        <p class="mb-2">${escapeHtml(m.body)}</p>
+        <a class="btn btn-sm btn-outline-light" href="mailto:${encodeURIComponent(s.gmail || s.email)}?subject=${encodeURIComponent('Re: ' + m.subject)}">Open in Gmail</a>
+      </div>`
+            )
+            .join('')
+    }`;
 }
 
 function renderCourseDetail(courseId, asTrainer) {
@@ -463,24 +630,30 @@ function renderCourseDetail(courseId, asTrainer) {
     <p class="text-secondary">${course.description}</p>
     ${
       asTrainer
-        ? `<p class="mb-3"><span class="badge-soft">${enrolled.length} learners enrolled</span></p>`
+        ? `<p class="mb-3"><span class="badge-soft">${enrolled.length} learners with access</span></p>`
         : `<div class="mb-3"><div class="progress mb-1"><div class="progress-bar" style="width:${progress.percent}%"></div></div>
            <small class="text-secondary">${progress.percent}% complete</small></div>`
     }
     ${showCert ? `<button class="btn btn-primary w-100 mb-3" id="btn-cert"><i class="bi bi-award"></i> View certificate</button>` : ''}
-    <h3 class="h6 text-secondary mb-2">Lessons & assessments</h3>
+    <h3 class="h6 text-secondary mb-2">Modules, guides & assessments</h3>
     ${course.lessons
       .sort((a, b) => a.order - b.order)
       .map((lesson, idx) => {
         const done = progress?.completedLessonIds?.includes(lesson.id);
         const typeLabel =
-          lesson.type === 'quiz' ? 'Quiz' : lesson.type === 'assignment' ? 'Assignment' : 'Lesson';
+          lesson.type === 'quiz'
+            ? 'Assessment'
+            : lesson.type === 'assignment'
+              ? 'Summative assignment'
+              : lesson.type === 'guide'
+                ? 'Learner guide'
+                : 'Module';
         return `
         <div class="lesson-card ${done ? 'done' : ''}" data-lesson="${lesson.id}">
           <div class="num">${done ? '✓' : idx + 1}</div>
           <div class="flex-grow-1">
             <h4>${lesson.title}</h4>
-            <p>${typeLabel}${done ? ' · Completed' : ''}</p>
+            <p>${typeLabel}${done ? ' · Done' : ''}</p>
           </div>
           <i class="bi bi-chevron-right text-secondary"></i>
         </div>`;
@@ -505,9 +678,9 @@ function renderCertificate(courseId) {
   setBack(() => renderCourseDetail(courseId, false));
   content().innerHTML = `
     <div class="content-block text-center" style="border:2px solid #2563eb">
-      <p class="text-secondary mb-1">Certificate of Completion</p>
+      <p class="text-secondary mb-1">Certificate of Completion (demo)</p>
       <h2 class="mb-2">${s.name}</h2>
-      <p class="mb-3">has successfully completed</p>
+      <p class="mb-3">has completed the programme modules for</p>
       <h3 class="mb-3">${course.title}</h3>
       <p class="text-secondary small mb-0">EduFlow LMS · ${new Date().toLocaleDateString('en-ZA')}</p>
     </div>`;
@@ -517,20 +690,21 @@ function renderLesson(courseId, lesson, asTrainer) {
   const s = getSession();
   setBack(() => renderCourseDetail(courseId, asTrainer));
   const done = !asTrainer && getProgress(s.id, courseId).completedLessonIds.includes(lesson.id);
+  const label = lesson.type === 'guide' ? 'Mark guide as read' : 'Mark module complete';
 
   content().innerHTML = `
     <h2 class="page-title">${lesson.title}</h2>
-    <div class="content-block">${lesson.body}</div>
+    <div class="content-block">${formatBody(lesson.body)}</div>
     ${
       asTrainer
-        ? '<p class="text-secondary small">Trainer preview</p>'
+        ? '<p class="text-secondary small">Administrator preview</p>'
         : done
           ? '<button class="btn btn-outline-light w-100" disabled>Completed</button>'
-          : `<button class="btn btn-primary w-100" id="btn-complete">Mark as complete</button>`
+          : `<button class="btn btn-primary w-100" id="btn-complete">${label}</button>`
     }`;
 
   document.getElementById('btn-complete')?.addEventListener('click', () => {
-  markLessonComplete(s.id, courseId, lesson.id);
+    markLessonComplete(s.id, courseId, lesson.id);
     renderCourseDetail(courseId, false);
   });
 }
@@ -547,8 +721,8 @@ function renderAssignment(courseId, lesson, asTrainer) {
   if (asTrainer) {
     content().innerHTML = `
       <h2 class="page-title">${lesson.title}</h2>
-      <div class="content-block">${asg.instructions || lesson.body}</div>
-      <p class="text-secondary">Grade learner work under <strong>Grade</strong>.</p>`;
+      <div class="content-block">${formatBody(asg.instructions || lesson.body)}</div>
+      <p class="text-secondary">Grade under <strong>Grade</strong>.</p>`;
     return;
   }
 
@@ -556,8 +730,8 @@ function renderAssignment(courseId, lesson, asTrainer) {
     content().innerHTML = `
       <h2 class="page-title">${lesson.title}</h2>
       <div class="content-block">${escapeHtml(mine.text)}</div>
-      <div class="stat-card mb-3"><div class="label">Your mark</div><div class="value">${mine.score}%</div></div>
-      <button class="btn btn-outline-light w-100" id="btn-back-c">Back to course</button>`;
+      <div class="stat-card mb-3"><div class="label">Your result</div><div class="value">${mine.score}%</div></div>
+      <button class="btn btn-outline-light w-100" id="btn-back-c">Back</button>`;
     document.getElementById('btn-back-c').onclick = () => renderCourseDetail(courseId, false);
     return;
   }
@@ -565,24 +739,24 @@ function renderAssignment(courseId, lesson, asTrainer) {
   if (mine?.status === 'submitted') {
     content().innerHTML = `
       <h2 class="page-title">${lesson.title}</h2>
-      <p class="badge-soft badge-warn mb-3">Submitted — waiting for grade</p>
+      <p class="badge-soft badge-warn mb-3">Submitted — awaiting result</p>
       <div class="content-block">${escapeHtml(mine.text)}</div>
-      <button class="btn btn-outline-light w-100" id="btn-back-c">Back to course</button>`;
+      <button class="btn btn-outline-light w-100" id="btn-back-c">Back</button>`;
     document.getElementById('btn-back-c').onclick = () => renderCourseDetail(courseId, false);
     return;
   }
 
   content().innerHTML = `
     <h2 class="page-title">${lesson.title}</h2>
-    <div class="content-block mb-3">${asg.instructions || lesson.body}</div>
+    <div class="content-block mb-3">${formatBody(asg.instructions || lesson.body)}</div>
     <label class="form-label">Your submission</label>
-    <textarea class="form-control mb-3" id="sub-text" rows="5" placeholder="Type your answer..."></textarea>
-    <button class="btn btn-primary w-100" id="btn-submit">Submit assignment</button>`;
+    <textarea class="form-control mb-3" id="sub-text" rows="6" placeholder="Type your answer..."></textarea>
+    <button class="btn btn-primary w-100" id="btn-submit">Submit for marking</button>`;
 
   document.getElementById('btn-submit').addEventListener('click', () => {
     const text = document.getElementById('sub-text').value.trim();
     if (text.length < 20) {
-      alert('Please write a bit more (a few sentences).');
+      alert('Please write a fuller answer before submitting.');
       return;
     }
     const list = getSubmissions();
@@ -597,6 +771,12 @@ function renderAssignment(courseId, lesson, asTrainer) {
       score: null,
     });
     saveSubmissions(list);
+    pushMessage(
+      s.id,
+      s.gmail || s.email,
+      'Submission received',
+      'Your assignment was submitted successfully. You will receive your result in the app and via your linked email when graded.'
+    );
     renderAssignment(courseId, lesson, false);
   });
 }
@@ -673,15 +853,23 @@ function finishQuiz() {
   save(KEYS.attempts, attempts);
   if (passed) markLessonComplete(s.id, quizState.courseId, quizState.lessonId);
 
+  pushMessage(
+    s.id,
+    s.gmail || s.email,
+    'Quiz result',
+    'You scored ' + score + '% (' + (passed ? 'Pass' : 'Not yet passed') + '). See Results in the app.'
+  );
+
   content().innerHTML = `
-    <h2 class="page-title">Quiz result</h2>
+    <h2 class="page-title">Assessment result</h2>
     <div class="stat-card mb-3 text-center">
       <div class="label">Your score</div>
       <div class="value">${score}%</div>
       <div class="mt-2">${passed ? '<span class="badge-soft badge-ok">Passed</span>' : '<span class="badge-soft badge-warn">Not passed</span>'}</div>
     </div>
     <button class="btn btn-primary w-100" id="btn-back-course">Back to course</button>`;
-  document.getElementById('btn-back-course').onclick = () => renderCourseDetail(quizState.courseId, false);
+  document.getElementById('btn-back-course').onclick = () =>
+    renderCourseDetail(quizState.courseId, false);
 }
 
 function renderReport() {
@@ -707,6 +895,7 @@ function renderReport() {
       graded.length === 0 ? '—' : Math.round(graded.reduce((a, s) => a + s.score, 0) / graded.length) + '%';
     return {
       learner: learner?.name || '—',
+      gmail: learner?.gmail || learner?.email || '',
       course: course?.title || '—',
       percent: p?.percent ?? 0,
       quiz: best === null ? '—' : best + '%',
@@ -715,21 +904,20 @@ function renderReport() {
   });
 
   content().innerHTML = `
-    <h2 class="page-title">Progress report</h2>
-    <p class="text-secondary small mb-2">Live sample data — refreshes when other tabs change progress</p>
+    <h2 class="page-title">Progress & results report</h2>
     <div class="content-block p-0 overflow-auto">
       <table class="table-dark-ef">
-        <thead><tr><th>Learner</th><th>Course</th><th>Progress</th><th>Quiz</th><th>Assignment</th></tr></thead>
+        <thead><tr><th>Learner</th><th>Gmail</th><th>Course</th><th>%</th><th>Quiz</th><th>Task</th></tr></thead>
         <tbody>
           ${
             rows.length
               ? rows
                   .map(
                     (r) =>
-                      `<tr><td>${r.learner}</td><td>${r.course}</td><td>${r.percent}%</td><td>${r.quiz}</td><td>${r.assignment}</td></tr>`
+                      `<tr><td>${r.learner}</td><td>${r.gmail}</td><td>${r.course}</td><td>${r.percent}%</td><td>${r.quiz}</td><td>${r.assignment}</td></tr>`
                   )
                   .join('')
-              : '<tr><td colspan="5">No approved enrolments</td></tr>'
+              : '<tr><td colspan="6">No approved enrolments</td></tr>'
           }
         </tbody>
       </table>
@@ -739,24 +927,28 @@ function renderReport() {
 function renderAbout() {
   currentView = { name: 'about' };
   setBack(null);
-  const mode = getLiveMode();
+  const s = getSession();
   content().innerHTML = `
-    <h2 class="page-title">About EduFlow</h2>
+    <h2 class="page-title">About & links</h2>
+    <a class="live-demo-link" href="https://jlephoto23-collab.github.io/EduFlow-LMS/" target="_blank" rel="noopener">
+      <span><span class="live-dot">●</span> Live demo</span>
+      <span class="live-demo-url">jlephoto23-collab.github.io/EduFlow-LMS</span>
+    </a>
     <div class="content-block">
-      <p class="mb-2"><strong>EduFlow LMS</strong> · Version 1.2.0</p>
-      <p class="mb-2 text-secondary">Pilot demo with rich sample data, enrolment approval, quizzes, assignments, grading, reports and certificates.</p>
-      <p class="mb-0"><span class="badge-soft badge-ok">${mode === 'firebase' ? 'Cloud live mode' : 'Live tab-sync mode'}</span></p>
+      <p class="mb-2"><strong>EduFlow LMS</strong> · Pilot for training providers</p>
+      <p class="text-secondary small mb-0">Programmes: Project Management NQF 4, Generic Management NQF 4, Business Administration NQF 4 (original demo content — not official SAQA material).</p>
     </div>
     <div class="content-block">
-      <p class="mb-1"><strong>How live updates work now</strong></p>
-      <p class="text-secondary small mb-2">Open two browser windows on this site. Log in as trainer in one and learner in the other. Approvals, submissions and progress update across tabs in real time.</p>
-      <p class="text-secondary small mb-0">For real students on different phones, connect Firebase (see js/firebase-config.js and README).</p>
+      <p class="mb-1"><strong>Gmail-linked communications</strong></p>
+      <p class="text-secondary small mb-2">Your account email is treated as the address for provider notices. In-app Inbox stores the same messages. Production connects outbound email (e.g. to Gmail) via Firebase or an email API.</p>
+      ${s ? `<p class="small mb-0">Signed in: ${s.gmail || s.email}</p>` : ''}
     </div>
     <button class="btn btn-outline-light w-100" id="btn-reset">Reset demo data</button>`;
 
   document.getElementById('btn-reset')?.addEventListener('click', () => {
     if (!confirm('Reset all demo data and log out?')) return;
     Object.values(KEYS).forEach((k) => localStorage.removeItem(k));
+    localStorage.removeItem('ef_seed_ver');
     seedIfNeeded();
     logout();
   });
@@ -789,7 +981,7 @@ document.addEventListener('DOMContentLoaded', () => {
     e.preventDefault();
     const name = prompt('Full name');
     if (!name) return;
-    const email = prompt('Email');
+    const email = prompt('Gmail / email (used for all provider communications)');
     if (!email) return;
     const password = prompt('Password (min 6 characters)');
     if (!password || password.length < 6) {
