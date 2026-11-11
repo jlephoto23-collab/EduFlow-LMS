@@ -171,13 +171,32 @@ function saqaMetaHtml(c) {
 
 function saqaDetailHtml(c) {
   const outcomes = (c.outcomes || []).map((o) => `<li>${escapeHtml(o)}</li>`).join('');
+  const units = (c.unitStandards || [])
+    .map(
+      (u) =>
+        `<li><strong>US ${escapeHtml(String(u.id))}</strong> — ${escapeHtml(u.title)} <span class="text-secondary">(NQF ${u.nqfLevel != null ? u.nqfLevel : 4}${u.credits != null ? ', ' + u.credits + ' cr' : ''})</span></li>`
+    )
+    .join('');
   return `<div class="content-block mb-3">
     <p class="mb-1"><strong>SAQA reference</strong></p>
     <p class="text-secondary small mb-2">${escapeHtml(c.saqaTitle || c.title || '')} · ID <strong>${escapeHtml(String(c.saqaId || '—'))}</strong> · NQF ${c.nqfLevel || 4} · ${c.credits != null ? c.credits + ' credits' : 'credits n/a'}</p>
     ${c.relatedSaqaNote ? `<p class="text-secondary small mb-2">${escapeHtml(c.relatedSaqaNote)}${c.relatedSaqaId ? ' (related ID ' + escapeHtml(String(c.relatedSaqaId)) + ')' : ''}</p>` : ''}
     ${c.purpose ? `<p class="mb-2"><strong>Purpose</strong><br>${escapeHtml(c.purpose)}</p>` : ''}
+    ${units ? `<p class="mb-1"><strong>Unit standards (register references)</strong></p><ul class="mb-2 text-secondary small">${units}</ul>` : ''}
+    ${outcomes ? `<p class="mb-1"><strong>Programme learning outcomes (pilot)</strong></p><ul class="mb-0 text-secondary small">${outcomes}</ul>` : ''}
+    <p class="text-secondary small mt-2 mb-0">Unit standard IDs/titles are public register references. Module outcomes are original pilot wording — not official SAQA assessment criteria.</p>
+  </div>`;
+}
+
+function moduleOutcomesHtml(lesson) {
+  const outcomes = (lesson.outcomes || []).map((o) => `<li>${escapeHtml(o)}</li>`).join('');
+  const us = lesson.unitStandardId
+    ? `<p class="text-secondary small mb-2"><strong>US ${escapeHtml(String(lesson.unitStandardId))}</strong> — ${escapeHtml(lesson.unitStandardTitle || '')}</p>`
+    : '';
+  if (!outcomes && !us) return '';
+  return `<div class="content-block mb-3">
+    ${us}
     ${outcomes ? `<p class="mb-1"><strong>Learning outcomes (pilot)</strong></p><ul class="mb-0 text-secondary small">${outcomes}</ul>` : ''}
-    <p class="text-secondary small mt-2 mb-0">Demo modules only. Module credits below are illustrative pilot weights, not official unit-standard credits.</p>
   </div>`;
 }
 
@@ -323,6 +342,7 @@ function renderTrainerHome() {
         ${saqaMetaHtml(c)}
         <div class="meta">
           <span class="badge-soft">${c.lessons.length} modules</span>
+          <span class="badge-soft">${(c.unitStandards || []).length} unit stds</span>
           <span class="badge-soft">${enrolments.filter((e) => e.courseId === c.id && e.status === 'approved').length} enrolled</span>
         </div>
       </div>`
@@ -345,7 +365,6 @@ function renderApprovals() {
 
   content().innerHTML = `
     <h2 class="page-title">Applications & access</h2>
-    <p class="text-secondary mb-3">Approve course access.</p>
     ${
       pending.length === 0
         ? '<div class="empty">No pending requests</div>'
@@ -518,7 +537,7 @@ function renderCatalog() {
 
   content().innerHTML = `
     <h2 class="page-title">Choose your course</h2>
-    <p class="text-secondary mb-3">Each programme shows NQF level, total credits and SAQA ID. Modules inside also show NQF and credits.</p>
+    <p class="text-secondary mb-3">Each programme lists SAQA ID, unit standards and learning outcomes.</p>
     ${courses
       .map((c) => {
         const en = enrolmentFor(s.id, c.id);
@@ -532,7 +551,7 @@ function renderCatalog() {
           ${saqaMetaHtml(c)}
           <div class="meta">
             <span class="badge-soft">${c.category}</span>
-            <span class="badge-soft">${c.lessons.length} modules</span>
+            <span class="badge-soft">${(c.unitStandards || []).length} unit stds</span>
             ${action}
           </div>
         </div>`;
@@ -553,12 +572,7 @@ function renderCatalog() {
       });
       saveEnrolments(list);
       const course = getCourse(courseId);
-      pushMessage(
-        s.id,
-        s.gmail || s.email,
-        'Application received: ' + (course?.title || ''),
-        'We received your application.'
-      );
+      pushMessage(s.id, s.gmail || s.email, 'Application received: ' + (course?.title || ''), 'We received your application.');
       renderCatalog();
     });
   });
@@ -638,7 +652,7 @@ function renderCourseDetail(courseId, asTrainer) {
   const course = getCourse(courseId);
   if (!course) return;
   const s = getSession();
-  const progress = asTrainer ? null : getProgress(s.id, courseId);
+  const progress = asTrainer ? null : getProgress(s.id, courseId, courseId);
   const enrolled = getEnrolments().filter((e) => e.courseId === courseId && e.status === 'approved');
 
   setBack(() => (asTrainer ? renderTrainerHome() : renderLearnerHome()));
@@ -650,7 +664,7 @@ function renderCourseDetail(courseId, asTrainer) {
     <h2 class="page-title">${course.title}</h2>
     <p class="text-secondary">${course.description}</p>
     ${saqaDetailHtml(course)}
-    <p class="text-secondary small mb-3">Demo modules total <strong>${moduleCredits} cr</strong> (illustrative weights inside this pilot pack).</p>
+    <p class="text-secondary small mb-3">Demo modules total <strong>${moduleCredits} cr</strong> (illustrative weights).</p>
     ${
       asTrainer
         ? `<p class="mb-3"><span class="badge-soft">${enrolled.length} learners with access</span></p>`
@@ -676,7 +690,7 @@ function renderCourseDetail(courseId, asTrainer) {
           <div class="num">${done ? '✓' : idx + 1}</div>
           <div class="flex-grow-1">
             <h4>${lesson.title}</h4>
-            <p>${typeLabel}${done ? ' · Done' : ''} · ${lesson.credits != null ? lesson.credits + ' cr' : ''} · NQF ${lesson.nqfLevel != null ? lesson.nqfLevel : 4}</p>
+            <p>${typeLabel}${done ? ' · Done' : ''} · ${lesson.credits != null ? lesson.credits + ' cr' : ''} · NQF ${lesson.nqfLevel != null ? lesson.nqfLevel : 4}${lesson.unitStandardId ? ' · US ' + lesson.unitStandardId : ''}</p>
           </div>
           <i class="bi bi-chevron-right text-secondary"></i>
         </div>`;
@@ -718,6 +732,7 @@ function renderLesson(courseId, lesson, asTrainer) {
   content().innerHTML = `
     <h2 class="page-title">${lesson.title}</h2>
     <p class="mb-2">${moduleMetaHtml(lesson)} <span class="badge-soft">demo module credits</span></p>
+    ${moduleOutcomesHtml(lesson)}
     <div class="content-block">${formatBody(lesson.body)}</div>
     ${
       asTrainer
@@ -746,6 +761,7 @@ function renderAssignment(courseId, lesson, asTrainer) {
     content().innerHTML = `
       <h2 class="page-title">${lesson.title}</h2>
       <p class="mb-2">${moduleMetaHtml(lesson)}</p>
+      ${moduleOutcomesHtml(lesson)}
       <div class="content-block">${formatBody(asg.instructions || lesson.body)}</div>
       <p class="text-secondary">Grade under <strong>Grade</strong>.</p>`;
     return;
@@ -776,6 +792,7 @@ function renderAssignment(courseId, lesson, asTrainer) {
   content().innerHTML = `
     <h2 class="page-title">${lesson.title}</h2>
     <p class="mb-2">${moduleMetaHtml(lesson)} <span class="badge-soft">demo module credits</span></p>
+    ${moduleOutcomesHtml(lesson)}
     <div class="content-block mb-3">${formatBody(asg.instructions || lesson.body)}</div>
     <label class="form-label">Your submission</label>
     <textarea class="form-control mb-3" id="sub-text" rows="6" placeholder="Type your answer..."></textarea>
@@ -812,6 +829,7 @@ function renderQuiz(courseId, lesson, asTrainer) {
     content().innerHTML = `
       <h2 class="page-title">${lesson.title}</h2>
       <p class="mb-2">${moduleMetaHtml(lesson)}</p>
+      ${moduleOutcomesHtml(lesson)}
       <p class="text-secondary">${lesson.quiz.questions.length} questions · pass ${lesson.quiz.passMark}%</p>
       <ol class="content-block">${lesson.quiz.questions.map((q) => `<li class="mb-2">${q.q}</li>`).join('')}</ol>`;
     return;
@@ -919,11 +937,11 @@ function renderReport() {
       graded.length === 0 ? '—' : Math.round(graded.reduce((a, s) => a + s.score, 0) / graded.length) + '%';
     return {
       learner: learner?.name || '—',
-      gmail: learner?.gmail || learner?.email || '',
       course: course?.title || '—',
       saqa: course?.saqaId || '—',
       nqf: course?.nqfLevel || 4,
       credits: course?.credits || '—',
+      units: (course?.unitStandards || []).length,
       percent: p?.percent ?? 0,
       quiz: best === null ? '—' : best + '%',
       assignment: avgAssign,
@@ -934,17 +952,17 @@ function renderReport() {
     <h2 class="page-title">Progress & results report</h2>
     <div class="content-block p-0 overflow-auto">
       <table class="table-dark-ef">
-        <thead><tr><th>Learner</th><th>Course</th><th>SAQA</th><th>NQF</th><th>Credits</th><th>%</th><th>Quiz</th><th>Task</th></tr></thead>
+        <thead><tr><th>Learner</th><th>Course</th><th>SAQA</th><th>NQF</th><th>Cr</th><th>US</th><th>%</th><th>Quiz</th><th>Task</th></tr></thead>
         <tbody>
           ${
             rows.length
               ? rows
                   .map(
                     (r) =>
-                      `<tr><td>${r.learner}</td><td>${r.course}</td><td>${r.saqa}</td><td>${r.nqf}</td><td>${r.credits}</td><td>${r.percent}%</td><td>${r.quiz}</td><td>${r.assignment}</td></tr>`
+                      `<tr><td>${r.learner}</td><td>${r.course}</td><td>${r.saqa}</td><td>${r.nqf}</td><td>${r.credits}</td><td>${r.units}</td><td>${r.percent}%</td><td>${r.quiz}</td><td>${r.assignment}</td></tr>`
                   )
                   .join('')
-              : '<tr><td colspan="8">No approved enrolments</td></tr>'
+              : '<tr><td colspan="9">No approved enrolments</td></tr>'
           }
         </tbody>
       </table>
@@ -954,7 +972,6 @@ function renderReport() {
 function renderAbout() {
   currentView = { name: 'about' };
   setBack(null);
-  const s = getSession();
   content().innerHTML = `
     <h2 class="page-title">About & links</h2>
     <a class="live-demo-link" href="https://jlephoto23-collab.github.io/EduFlow-LMS/" target="_blank" rel="noopener">
@@ -963,7 +980,7 @@ function renderAbout() {
     </a>
     <div class="content-block">
       <p class="mb-2"><strong>EduFlow LMS</strong></p>
-      <p class="text-secondary small mb-0">Programmes and modules show NQF level and credits. Programme credits reference SAQA register totals; module credits are illustrative demo weights.</p>
+      <p class="text-secondary small mb-0">Programmes show SAQA ID, unit standard references and pilot learning outcomes. Module outcomes are original demo wording, not official SAQA assessment criteria.</p>
     </div>
     <button class="btn btn-outline-light w-100" id="btn-reset">Reset demo data</button>`;
 
