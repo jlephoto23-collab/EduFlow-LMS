@@ -241,6 +241,7 @@ function refreshCurrentView() {
   else if (n === 'messages') renderMessages();
   else if (n === 'about') renderAbout();
   else if (n === 'learners') renderLearners();
+  else if (n === 'programmes') renderProgrammes();
   else if (n === 'course' && currentView.courseId)
     renderCourseDetail(currentView.courseId, currentView.asTrainer);
 }
@@ -340,7 +341,7 @@ function renderTrainerHome() {
     <div class="card-grid mb-3">
       <div class="stat-card stat-link" data-dash="programmes" role="button" tabindex="0">
         <div class="label">Programmes</div><div class="value">${courses.length}</div>
-        <div class="stat-hint">View programmes</div>
+        <div class="stat-hint">Open programmes</div>
       </div>
       <div class="stat-card stat-link" data-dash="learners" role="button" tabindex="0">
         <div class="label">Learners</div><div class="value">${learners.length}</div>
@@ -381,7 +382,8 @@ function renderTrainerHome() {
 
   const goDash = (key) => {
     if (key === 'programmes') {
-      document.getElementById('nqf-programmes')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      renderProgrammes();
+      setNavActive('home');
       return;
     }
     if (key === 'learners') {
@@ -463,6 +465,48 @@ function renderLearners() {
   });
 }
 
+function renderProgrammes() {
+  currentView = { name: 'programmes' };
+  setBack(() => {
+    setNavActive('home');
+    renderTrainerHome();
+  });
+  const courses = getCourses();
+  const enrolments = getEnrolments();
+
+  content().innerHTML = `
+    <h2 class="page-title">Programmes</h2>
+    <p class="text-secondary mb-3">${courses.length} NQF programme(s). Tap a card to open modules and unit standards.</p>
+    ${
+      courses.length === 0
+        ? '<div class="empty">No programmes seeded</div>'
+        : courses
+            .map((c) => {
+              const approved = enrolments.filter((e) => e.courseId === c.id && e.status === 'approved').length;
+              const pend = enrolments.filter((e) => e.courseId === c.id && e.status === 'pending').length;
+              return `
+        <div class="list-card" data-open-course="${c.id}">
+          <h3>${c.title}</h3>
+          <p>${c.description}</p>
+          ${saqaMetaHtml(c)}
+          <div class="meta">
+            <span class="badge-soft">${c.lessons.length} modules</span>
+            <span class="badge-soft">${(c.unitStandards || []).length} unit stds</span>
+            <span class="badge-soft badge-ok">${approved} enrolled</span>
+            ${pend ? `<span class="badge-soft badge-warn">${pend} pending</span>` : ''}
+          </div>
+        </div>`;
+            })
+            .join('')
+    }`;
+
+  content()
+    .querySelectorAll('[data-open-course]')
+    .forEach((el) =>
+      el.addEventListener('click', () => renderCourseDetail(el.dataset.openCourse, true))
+    );
+}
+
 function renderApprovals() {
   currentView = { name: 'approvals' };
   setBack(null);
@@ -475,7 +519,7 @@ function renderApprovals() {
     <p class="text-secondary mb-3">Approve or reject course access requests.</p>
     ${
       pending.length === 0
-        ? '<div class="empty">No pending requests</div>'
+        ? '<div class="empty">No pending requests</div><button class="btn btn-outline-light w-100 mt-2" id="btn-home-from-appr">Back to dashboard</button>'
         : pending
             .map((e) => {
               const learner = users.find((u) => u.id === e.learnerId);
@@ -492,6 +536,11 @@ function renderApprovals() {
             })
             .join('')
     }`;
+
+  document.getElementById('btn-home-from-appr')?.addEventListener('click', () => {
+    setNavActive('home');
+    renderTrainerHome();
+  });
 
   content().querySelectorAll('[data-approve]').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -548,7 +597,7 @@ function renderGrading() {
     <p class="text-secondary mb-3">Mark written work and send results to the learner inbox.</p>
     ${
       toGrade.length === 0
-        ? '<div class="empty">No submissions waiting</div>'
+        ? '<div class="empty">No submissions waiting</div><button class="btn btn-outline-light w-100 mt-2" id="btn-home-from-grade">Back to dashboard</button>'
         : toGrade
             .map((sub) => {
               const learner = users.find((u) => u.id === sub.learnerId);
@@ -567,6 +616,11 @@ function renderGrading() {
             })
             .join('')
     }`;
+
+  document.getElementById('btn-home-from-grade')?.addEventListener('click', () => {
+    setNavActive('home');
+    renderTrainerHome();
+  });
 
   content().querySelectorAll('[data-grade]').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -772,7 +826,12 @@ function renderCourseDetail(courseId, asTrainer) {
   const progress = asTrainer ? null : getProgress(s.id, courseId);
   const enrolled = getEnrolments().filter((e) => e.courseId === courseId && e.status === 'approved');
 
-  setBack(() => (asTrainer ? renderTrainerHome() : renderLearnerHome()));
+  setBack(() => {
+    if (asTrainer) {
+      if (currentView.fromProgrammes) renderProgrammes();
+      else renderTrainerHome();
+    } else renderLearnerHome();
+  });
 
   const showCert = !asTrainer && progress && progress.percent >= 100;
   const moduleCredits = (course.lessons || []).reduce((sum, l) => sum + (l.credits || 0), 0);
