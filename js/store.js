@@ -1,6 +1,6 @@
 /**
- * EduFlow data store — sample NQF-aligned programmes (original training content).
- * Not official SAQA/SETA materials; written for pilot demo purposes.
+ * EduFlow data store — NQF-aligned pilot programmes (original content).
+ * SAQA IDs reference public register metadata only — not official learner guides.
  */
 
 import { isFirebaseEnabled } from './firebase-config.js';
@@ -69,9 +69,8 @@ export function uid() {
 }
 
 export function seedIfNeeded() {
-  // Force-refresh seed when structure version changes
   const ver = load('ef_seed_ver', 0);
-  if (ver >= 3 && load(KEYS.users, null)) return;
+  if (ver >= 4 && load(KEYS.users, null)) return;
 
   Object.values(KEYS).forEach((k) => localStorage.removeItem(k));
 
@@ -114,11 +113,24 @@ export function seedIfNeeded() {
   const courses = [
     {
       id: 'c_pm4',
-      title: 'Project Management (NQF Level 4)',
+      title: 'Project Management support (aligned to NQF pathway)',
       nqfLevel: 4,
+      credits: 136,
+      saqaId: '50080',
+      saqaTitle: 'FETC: Project Management (legacy reference)',
+      relatedSaqaId: '101869',
+      relatedSaqaNote: 'Current occupational pathway often cited: OC Project Manager NQF 5 (verify on SAQA)',
       programme: 'Project Management',
       description:
-        'Plan, implement and close simple projects in a workplace context. Includes learner guide modules, formative quizzes and a summative assignment.',
+        'Pilot modules for planning and supporting workplace projects. Demo content only — not a full accredited qualification pack.',
+      purpose:
+        'Help learners clarify project goals, break work into tasks, track progress and report status in a simple workplace project.',
+      outcomes: [
+        'Explain what makes work a project (scope, time, cost)',
+        'List project life-cycle phases and typical support tasks',
+        'Use basic planning tools (task list, timeline, risk note)',
+        'Submit a mini project plan for assessment',
+      ],
       category: 'Project Management',
       trainerId: trainer.id,
       lessons: [
@@ -198,9 +210,22 @@ export function seedIfNeeded() {
       id: 'c_gm4',
       title: 'Generic Management (NQF Level 4)',
       nqfLevel: 4,
+      credits: 150,
+      saqaId: '57712',
+      saqaTitle: 'FETC: Generic Management',
+      relatedSaqaId: '',
+      relatedSaqaNote: 'Confirm registration and enrolment end dates on the SAQA register before marketing as accredited delivery.',
       programme: 'Generic Management',
       description:
-        'Supervise teams, communicate effectively and support operational goals. Learner guides, knowledge checks and practical assignment.',
+        'Pilot programme for junior managers and supervisors. Demo modules and assessments — not the full accredited unit-standard pack.',
+      purpose:
+        'Support team leaders and supervisors to plan work, communicate clearly, motivate teams and monitor performance against organisational standards.',
+      outcomes: [
+        'Describe the role of a junior manager / supervisor',
+        'Plan and prioritise team work for a day or week',
+        'Give fair, behaviour-focused feedback',
+        'Prepare a short team briefing plan for assessment',
+      ],
       category: 'Generic Management',
       trainerId: trainer.id,
       lessons: [
@@ -283,11 +308,24 @@ export function seedIfNeeded() {
     },
     {
       id: 'c_ba4',
-      title: 'Business Administration (NQF Level 4)',
+      title: 'Business Administration Services (NQF Level 4)',
       nqfLevel: 4,
+      credits: 140,
+      saqaId: '61595',
+      saqaTitle: 'FETC: Business Administration Services',
+      relatedSaqaId: '',
+      relatedSaqaNote: 'Confirm the exact learning programme ID your provider is accredited for on SAQA.',
       programme: 'Business Administration',
       description:
-        'Office systems, professional communication, records and customer support. Modules, learner guide notes and assessments.',
+        'Pilot modules for office systems, professional communication and customer support. Not a substitute for licensed SETA learning materials.',
+      purpose:
+        'Build practical administration skills: accurate records, professional documents, confidential handling of information and clear customer contact.',
+      outcomes: [
+        'Explain why accurate, confidential admin matters',
+        'Produce a clear professional email',
+        'Apply basic customer and telephone etiquette',
+        'Submit a meeting-confirmation email for assessment',
+      ],
       category: 'Business Administration',
       trainerId: trainer.id,
       lessons: [
@@ -440,5 +478,5 @@ export function seedIfNeeded() {
   save(KEYS.attempts, [], { silent: true });
   save(KEYS.applications, [], { silent: true });
   save(KEYS.messages, messages, { silent: true });
-  save('ef_seed_ver', 3, { silent: true });
+  save('ef_seed_ver', 4, { silent: true });
 }
