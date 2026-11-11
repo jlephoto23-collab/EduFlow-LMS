@@ -240,6 +240,7 @@ function refreshCurrentView() {
   else if (n === 'results') renderResults();
   else if (n === 'messages') renderMessages();
   else if (n === 'about') renderAbout();
+  else if (n === 'learners') renderLearners();
   else if (n === 'course' && currentView.courseId)
     renderCourseDetail(currentView.courseId, currentView.asTrainer);
 }
@@ -260,6 +261,27 @@ function showApp() {
 }
 
 function renderNav() {
+  const s = getSession();
+  if (!s) return;
+  if (s.role === 'trainer') {
+    bottomNav().innerHTML = `
+      <a href="#" data-nav="home" class="active"><i class="bi bi-grid-1x2"></i>Home</a>
+      <a href="#" data-nav="approvals"><i class="bi bi-person-check"></i>Approvals</a>
+      <a href="#" data-nav="grade"><i class="bi bi-pencil-square"></i>Grade</a>
+      <a href="#" data-nav="report"><i class="bi bi-graph-
+      <a href="#" data-nav="about"><i class="bi bi-info-circle"></i>More</a>`;
+  } else {
+    bottomNav().innerHTML = `
+      <a href="#" data-nav="home" class="active"><i class="bi bi-grid-1x2"></i>Home</a>
+      <a href="#" data-nav="catalog"><i class="bi bi-journal-plus"></i>Courses</a>
+      <a href="#" data-nav="results"><i class="bi bi-clipboard-check"></i>Results</a>
+      <a href="#" data-nav="messages"><i class="bi bi-envelope"></i>Inbox</a>
+      <a href="#" data-nav="about"><i class="bi bi-info-circle"></i>More</a>`;
+  }
+  // fix reports icon if truncated - rewrite trainer nav properly below
+}
+
+function wireNav() {
   const s = getSession();
   if (!s) return;
   if (s.role === 'trainer') {
@@ -289,9 +311,20 @@ function renderNav() {
       if (n === 'results') renderResults();
       if (n === 'messages') renderMessages();
       if (n === 'about') renderAbout();
-      bottomNav().querySelectorAll('a').forEach((x) => x.classList.remove('active'));
-      a.classList.add('active');
+      setNavActive(n);
     });
+  });
+}
+
+function renderNav() {
+  wireNav();
+}
+
+function setNavActive(nav) {
+  const bar = bottomNav();
+  if (!bar) return;
+  bar.querySelectorAll('a').forEach((a) => {
+    a.classList.toggle('active', a.dataset.nav === nav);
   });
 }
 
@@ -299,7 +332,7 @@ function setBack(handler) {
   const b = btnBack();
   if (!handler) {
     b.classList.add('d-none');
-    b.onclick = null;
+    b.onclick = = null;
     return;
   }
   b.classList.remove('d-none');
@@ -324,15 +357,27 @@ function renderTrainerHome() {
 
   content().innerHTML = `
     <h2 class="page-title">Administrator dashboard</h2>
-    <p class="text-secondary small mb-3">Manage applications, course access, assessments and results.</p>
+    <p class="text-secondary small mb-3">Tap a tile to open the related screen.</p>
     <div class="card-grid mb-3">
-      <div class="stat-card"><div class="label">Programmes</div><div class="value">${courses.length}</div></div>
-      <div class="stat-card"><div class="label">Learners</div><div class="value">${learners.length}</div></div>
-      <div class="stat-card"><div class="label">Pending access</div><div class="value">${pending}</div></div>
-      <div class="stat-card"><div class="label">To grade</div><div class="value">${submissions.length}</div></div>
+      <div class="stat-card stat-link" data-dash="programmes" role="button" tabindex="0">
+        <div class="label">Programmes</div><div class="value">${courses.length}</div>
+        <div class="stat-hint">View programmes</div>
+      </div>
+      <div class="stat-card stat-link" data-dash="learners" role="button" tabindex="0">
+        <div class="label">Learners</div><div class="value">${learners.length}</div>
+        <div class="stat-hint">View learners</div>
+      </div>
+      <div class="stat-card stat-link" data-dash="pending" role="button" tabindex="0">
+        <div class="label">Pending access</div><div class="value">${pending}</div>
+        <div class="stat-hint">Open Approvals</div>
+      </div>
+      <div class="stat-card stat-link" data-dash="grade" role="button" tabindex="0">
+        <div class="label">To grade</div><div class="value">${submissions.length}</div>
+        <div class="stat-hint">Open Grade</div>
+      </div>
     </div>
-    ${pending ? `<div class="list-card" style="border-color:#eab308"><h3>Applications</h3><p>${pending} waiting. Open Approvals.</p></div>` : ''}
-    <h3 class="h6 text-secondary mb-2">NQF programmes</h3>
+    ${pending ? `<div class="list-card list-link" style="border-color:#eab308" data-dash="pending" role="button" tabindex="0"><h3>Applications</h3><p>${pending} waiting. Tap to open Approvals.</p></div>` : ''}
+    <h3 class="h6 text-secondary mb-2" id="nqf-programmes">NQF programmes</h3>
     ${courses
       .map(
         (c) => `
@@ -354,6 +399,89 @@ function renderTrainerHome() {
     .forEach((el) =>
       el.addEventListener('click', () => renderCourseDetail(el.dataset.openCourse, true))
     );
+
+  const goDash = (key) => {
+    if (key === 'programmes') {
+      document.getElementById('nqf-programmes')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    if (key === 'learners') {
+      renderLearners();
+      setNavActive('home');
+      return;
+    }
+    if (key === 'pending') {
+      renderApprovals();
+      setNavActive('approvals');
+      return;
+    }
+    if (key === 'grade') {
+      renderGrading();
+      setNavActive('grade');
+    }
+  };
+
+  content().querySelectorAll('[data-dash]').forEach((el) => {
+    el.addEventListener('click', () => goDash(el.dataset.dash));
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        goDash(el.dataset.dash);
+      }
+    });
+  });
+}
+
+function renderLearners() {
+  currentView = { name: 'learners' };
+  setBack(() => {
+    setNavActive('home');
+    renderTrainerHome();
+  });
+  const users = load(KEYS.users, []).filter((u) => u.role === 'learner');
+  const enrolments = getEnrolments();
+  const courses = getCourses();
+
+  content().innerHTML = `
+    <h2 class="page-title">Learners</h2>
+    <p class="text-secondary mb-3">${users.length} registered learner(s).</p>
+    ${
+      users.length === 0
+        ? '<div class="empty">No learners yet</div>'
+        : users
+            .map((u) => {
+              const mine = enrolments.filter((e) => e.learnerId === u.id);
+              const approved = mine.filter((e) => e.status === 'approved').length;
+              const pend = mine.filter((e) => e.status === 'pending').length;
+              const courseNames = mine
+                .map((e) => {
+                  const c = courses.find((x) => x.id === e.courseId);
+                  return `${c?.title || e.courseId} (${e.status})`;
+                })
+                .join('<br>');
+              return `
+          <div class="list-card">
+            <h3>${escapeHtml(u.name)}</h3>
+            <p class="text-secondary small mb-1">${escapeHtml(u.gmail || u.email)}</p>
+            <div class="meta mb-2">
+              <span class="badge-soft badge-ok">${approved} approved</span>
+              <span class="badge-soft ${pend ? 'badge-warn' : ''}">${pend} pending</span>
+            </div>
+            <p class="text-secondary small mb-0">${courseNames || 'No course applications yet'}</p>
+          </div>`;
+            })
+            .join('')
+    }
+    ${
+      enrolments.some((e) => e.status === 'pending')
+        ? `<button class="btn btn-primary w-100 mt-2" id="btn-to-approvals">Open Approvals</button>`
+        : ''
+    }`;
+
+  document.getElementById('btn-to-approvals')?.addEventListener('click', () => {
+    renderApprovals();
+    setNavActive('approvals');
+  });
 }
 
 function renderApprovals() {
@@ -365,6 +493,7 @@ function renderApprovals() {
 
   content().innerHTML = `
     <h2 class="page-title">Applications & access</h2>
+    <p class="text-secondary mb-3">Approve or reject course access requests.</p>
     ${
       pending.length === 0
         ? '<div class="empty">No pending requests</div>'
@@ -437,6 +566,7 @@ function renderGrading() {
 
   content().innerHTML = `
     <h2 class="page-title">Grade assessments</h2>
+    <p class="text-secondary mb-3">Mark written work and send results to the learner inbox.</p>
     ${
       toGrade.length === 0
         ? '<div class="empty">No submissions waiting</div>'
@@ -498,7 +628,7 @@ function renderLearnerHome() {
   content().innerHTML = `
     <h2 class="page-title">My learning</h2>
     <p class="text-secondary small mb-2">Linked Gmail: <strong>${s.gmail || s.email}</strong></p>
-    ${unread ? `<div class="list-card mb-2" style="border-color:#2563eb"><h3>Inbox</h3><p>${unread} new message(s).</p></div>` : ''}
+    ${unread ? `<div class="list-card mb-2" style="border-color:#2563eb" data-go="messages"><h3>Inbox</h3><p>${unread} new message(s). Tap to open.</p></div>` : ''}
     ${pending.length ? `<div class="list-card mb-2"><h3>Pending application</h3><p>${pending.length} request(s) awaiting approval.</p></div>` : ''}
     ${
       courses.length === 0
@@ -521,6 +651,13 @@ function renderLearnerHome() {
             })
             .join('')
     }`;
+
+  content().querySelectorAll('[data-go="messages"]').forEach((el) => {
+    el.addEventListener('click', () => {
+      renderMessages();
+      setNavActive('messages');
+    });
+  });
 
   content()
     .querySelectorAll('[data-open-course]')
@@ -559,7 +696,8 @@ function renderCatalog() {
       .join('')}`;
 
   content().querySelectorAll('[data-request]').forEach((btn) => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
       const courseId = btn.dataset.request;
       if (enrolmentFor(s.id, courseId)) return;
       const list = getEnrolments();
@@ -652,7 +790,7 @@ function renderCourseDetail(courseId, asTrainer) {
   const course = getCourse(courseId);
   if (!course) return;
   const s = getSession();
-  const progress = asTrainer ? null : getProgress(s.id, courseId, courseId);
+  const progress = asTrainer ? null : getProgress(s.id, courseId);
   const enrolled = getEnrolments().filter((e) => e.courseId === courseId && e.status === 'approved');
 
   setBack(() => (asTrainer ? renderTrainerHome() : renderLearnerHome()));
@@ -980,7 +1118,7 @@ function renderAbout() {
     </a>
     <div class="content-block">
       <p class="mb-2"><strong>EduFlow LMS</strong></p>
-      <p class="text-secondary small mb-0">Programmes show SAQA ID, unit standard references and pilot learning outcomes. Module outcomes are original demo wording, not official SAQA assessment criteria.</p>
+      <p class="text-secondary small mb-0">Dashboard tiles open linked screens. Programmes show SAQA ID, unit standards and pilot outcomes.</p>
     </div>
     <button class="btn btn-outline-light w-100" id="btn-reset">Reset demo data</button>`;
 
