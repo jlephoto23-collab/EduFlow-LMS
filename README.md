@@ -1,65 +1,79 @@
 # EduFlow LMS
 
-Learning Management System for training providers.
+Mobile-first **Learning Management System** for training providers.
 
-## 🟢 Live demo
+Learners apply, get approved, complete NQF pilot modules and assessments, and receive results — with Gmail-linked inbox messages.
+
+---
+
+## Live demo
 
 **https://jlephoto23-collab.github.io/EduFlow-LMS/**
 
-Share this link with buyers, trainers, and learners.
-
 | Role | Email | Password |
 |------|--------|----------|
-| Trainer | `trainer@eduflow.test` | `trainer123` |
-| Learner | `learner1@eduflow.test` | `learner123` |
+| **Administrator** | `admin@eduflow.test` | `admin123` |
+| **Learner** | `learner1@gmail.com` | `learner123` |
+
+Hard-refresh after updates: `Ctrl+F5`.
+
+---
+
+## Start here for the client meeting
+
+| Document | Purpose |
+|----------|---------|
+| **[PITCH.md](PITCH.md)** | 12-minute walkthrough script + checklist |
+| **[BUILD.md](BUILD.md)** | Local run, PWA install, Android APK (Capacitor) |
+| This README | Features, Firebase, modes |
 
 ---
 
 ## Features
 
-- Trainer & learner roles
-- Course catalog + enrolment **request → approve/reject**
-- Lessons, quizzes, written assignments
-- Submissions + trainer grading
-- Progress reports + completion certificate
-- **Live tab-sync** (two browser windows update in real time)
-- **Firebase-ready** for real multi-device cloud mode
+- Administrator & learner roles
+- Course catalog + **apply → approve / reject**
+- NQF pilot programmes with **SAQA IDs**, unit standards, learning outcomes
+- Learner guides, modules, quizzes, summative assignments
+- **Rubric marking**, **feedback**, **resubmit after fail**, **bulk grade**
+- Progress reports + demo certificate
+- Inbox notices (Gmail-linked)
+- Live tab-sync (two windows update together)
+- PWA-ready + Capacitor path for Android APK
+- Firebase-ready for real multi-user cloud
 
 ---
 
-## Firebase integration (real multi-user live)
+## Run on your computer
 
-### Files
+```bash
+git clone https://github.com/jlephoto23-collab/EduFlow-LMS.git
+cd EduFlow-LMS
+npm start
+```
+
+Open **http://localhost:3000**
+
+Full build / APK steps: **[BUILD.md](BUILD.md)**
+
+---
+
+## Firebase (production multi-user)
 
 | File | Purpose |
 |------|---------|
-| `js/firebase-config.js` | Paste your Firebase web config here |
-| `js/firebase.js` | Auth + Firestore helpers, seed, security rules example |
-| `js/store.js` | localStorage + BroadcastChannel (demo mode) |
-| `js/app.js` | UI and flows |
+| `js/firebase-config.js` | Paste your Firebase web config |
+| `js/firebase.js` | Auth + Firestore helpers |
+| `js/store.js` | Demo mode (localStorage + BroadcastChannel) |
 
-### When is Firebase used?
+- **Config empty** → demo mode (current live site)
+- **`projectId` set** → cloud mode; badge can show **Live cloud**
 
-- **Config empty** → localStorage + live tab-sync (current demo)
-- **`projectId` set** → cloud mode (`js/firebase.js`); badge shows **Live cloud**
-
-### Step-by-step setup
-
-1. Open [Firebase Console](https://console.firebase.google.com) → **Add project**.
-2. Project settings → **Add app** → **Web** → register app name (e.g. EduFlow).
-3. Copy the `firebaseConfig` object.
-4. Open `js/firebase-config.js` and paste values (uncomment all fields).
-5. **Authentication** → Sign-in method → enable **Email/Password**.
-6. **Firestore Database** → Create database → start in **test mode** for pilot.
-7. Push the updated config → hard-refresh the site.
-8. Create users in Authentication + a `users/{uid}` doc with `role: "trainer"` or `"learner"`.
-9. Add authorized domain: `jlephoto23-collab.github.io`.
-
-### Firestore collections
-
-`users` · `courses` · `enrolments` · `progress` · `assignments` · `submissions` · `attempts`
-
-Security rules example: see bottom of `js/firebase.js`.
+1. [Firebase Console](https://console.firebase.google.com) → create project  
+2. Enable **Email/Password** auth  
+3. Create **Firestore** database  
+4. Paste config into `js/firebase-config.js`  
+5. Add authorized domain: `jlephoto23-collab.github.io`  
 
 ---
 
@@ -67,11 +81,17 @@ Security rules example: see bottom of `js/firebase.js`.
 
 | Mode | How | Multi-device | Best for |
 |------|-----|-------------|----------|
-| Tab-sync (default) | localStorage + BroadcastChannel | No | Pitch demo |
-| Firebase | Auth + Firestore | Yes | Real students / paid pilot |
+| Tab-sync (default) | localStorage + BroadcastChannel | No | Client pitch |
+| Firebase | Auth + Firestore | Yes | Real pilot / paid |
 
 ---
 
-## Pitch wording
+## Pitch one-liner
 
 > “The product is live on the web today with full sample data and real-time UI updates. Production Phase 1 connects the same app to Firebase so every learner and trainer shares one secure cloud database.”
+
+---
+
+## Licence
+
+Private / unlicensed demo for client evaluation unless otherwise agreed.
