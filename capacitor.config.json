@@ -1,11 +1,12 @@
 {
   "appId": "com.eduflow.lms",
   "appName": "EduFlow LMS",
-  "webDir": ".",
+  "webDir": "www",
   "server": {
     "androidScheme": "https"
   },
   "android": {
     "allowMixedContent": true
-  }
+  },
+  "plugins": {}
 }

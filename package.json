@@ -7,13 +7,20 @@
   "scripts": {
     "start": "npx --yes serve -l 3000",
     "serve": "npx --yes serve -l 3000",
-    "build": "echo 'Static web app — no compile step. Use npm start or open index.html via a local server.'",
-    "cap:add": "npx --yes @capacitor/cli add android",
-    "cap:sync": "npx --yes @capacitor/cli sync",
+    "build": "node scripts/prepare-www.mjs",
+    "build:www": "node scripts/prepare-www.mjs",
+    "cap:add": "npm run build && npx --yes @capacitor/cli add android",
+    "cap:sync": "npm run build && npx --yes @capacitor/cli sync",
     "cap:open": "npx --yes @capacitor/cli open android",
-    "cap:build": "npx --yes @capacitor/cli sync && echo 'Open Android Studio: npm run cap:open — then Build > Build Bundle(s) / APK(s)'"
+    "cap:build": "npm run build && npx --yes @capacitor/cli sync && echo Open Android Studio with: npm run cap:open — then Build > Build APK",
+    "android": "npm run cap:build && npm run cap:open"
   },
-  "keywords": ["lms", "education", "nqf", "training", "pwa"],
+  "keywords": ["lms", "education", "nqf", "training", "pwa", "capacitor"],
   "author": "jlephoto23-collab",
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "@capacitor/android": "^6.2.0",
+    "@capacitor/cli": "^6.2.0",
+    "@capacitor/core": "^6.2.0"
+  }
 }
