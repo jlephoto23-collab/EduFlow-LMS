@@ -73,6 +73,58 @@ export function seedIfNeeded() {
   const ver = load('ef_seed_ver', 0);
   if (ver >= 7 && load(KEYS.users, null)) return;
 
+  // Soft upgrade from seed 6 → 7 (pitch data) without wiping custom logins
+  if (ver === 6 && load(KEYS.users, null)) {
+    const settings = load('ef_settings', null) || {
+      providerName: 'EduFlow Training Provider',
+      contactEmail: 'admin@eduflow.test',
+      supportPhone: '+27 00 000 0000',
+      welcomeMessage:
+        'Welcome to your learning programme. Complete guides, modules and assessments to progress. Results and notices are linked to your Gmail.',
+      passMarkDefault: 70,
+      certificateFooter:
+        'This is a demo certificate for pilot modules only — not an official SETA statement of results.',
+    };
+    save('ef_settings', settings, { silent: true });
+
+    const subs = load(KEYS.submissions, []);
+    if (!subs.some((s) => s.id === 'sub_demo1' || (s.assignmentId === 'asg_pm1' && s.status === 'submitted'))) {
+      subs.push({
+        id: 'sub_demo1',
+        assignmentId: 'asg_pm1',
+        courseId: 'c_pm4',
+        learnerId: 'u_l1',
+        text:
+          'Goal: Roll out a simple inventory checklist for the workshop store within 4 weeks.\n' +
+          'Tasks: (1) List stock categories (2) Draft checklist template (3) Pilot with two staff (4) Collect feedback (5) Finalise and train team.\n' +
+          'Owners: Store supervisor + admin assistant.\n' +
+          'Risk: Staff skip the form under pressure — mitigation: 5-minute toolbox talk and supervisor sign-off.',
+        status: 'submitted',
+        submittedAt: new Date().toISOString(),
+        score: null,
+        feedback: '',
+        rubricScores: null,
+        history: [],
+      });
+      save(KEYS.submissions, subs, { silent: true });
+    }
+
+    const enrolments = load(KEYS.enrolments, []);
+    if (!enrolments.some((e) => e.status === 'pending')) {
+      enrolments.push({
+        id: 'e2',
+        courseId: 'c_gm4',
+        learnerId: 'u_l2',
+        status: 'pending',
+        enrolledAt: new Date().toISOString(),
+      });
+      save(KEYS.enrolments, enrolments, { silent: true });
+    }
+
+    save('ef_seed_ver', 7, { silent: true });
+    return;
+  }
+
   Object.values(KEYS).forEach((k) => localStorage.removeItem(k));
   localStorage.removeItem('ef_settings');
 
@@ -456,7 +508,6 @@ export function seedIfNeeded() {
     { learnerId: 'u_l1', courseId: 'c_pm4', completedLessonIds: ['pm_g1', 'pm_m1'], percent: 40 },
   ];
 
-  // Pitch-ready: one assignment waiting for the trainer to grade
   const submissions = [
     {
       id: 'sub_demo1',
@@ -498,7 +549,6 @@ export function seedIfNeeded() {
     },
   ];
 
-  // Provider branding — edit under More → Provider settings before the client meeting
   const settings = {
     providerName: 'EduFlow Training Provider',
     contactEmail: 'admin@eduflow.test',
