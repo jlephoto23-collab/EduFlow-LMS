@@ -45,6 +45,14 @@
         <div id="login-error" class="alert alert-danger d-none py-2"></div>
         <button type="submit" class="btn btn-primary btn-lg w-100">Sign in</button>
       </form>
+
+      <button type="button" id="btn-install-app" class="btn btn-outline-light w-100 mt-3 d-none">
+        <i class="bi bi-download"></i> Install App
+      </button>
+      <p id="install-hint" class="text-secondary small text-center mt-2 mb-0">
+        On phone: browser menu → <strong>Add to Home screen</strong>
+      </p>
+
       <p class="text-center mt-3 mb-0">
         <a href="#" id="btn-register" class="link-light" style="color:#93c5fd">New learner? Register with Gmail</a>
       </p>
@@ -73,5 +81,32 @@
   </div>
 
   <script type="module" src="js/app.js"></script>
+  <script>
+    // PWA install prompt
+    let deferredPrompt = null;
+    const btnInstall = document.getElementById('btn-install-app');
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      btnInstall?.classList.remove('d-none');
+    });
+    btnInstall?.addEventListener('click', async () => {
+      if (!deferredPrompt) {
+        alert('Use your browser menu: Add to Home screen / Install app.');
+        return;
+      }
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      btnInstall.classList.add('d-none');
+    });
+
+    // Service worker (offline + installable)
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(() => {});
+      });
+    }
+  </script>
 </body>
 </html>
