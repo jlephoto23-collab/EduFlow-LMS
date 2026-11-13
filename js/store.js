@@ -71,9 +71,10 @@ export function uid() {
 
 export function seedIfNeeded() {
   const ver = load('ef_seed_ver', 0);
-  if (ver >= 6 && load(KEYS.users, null)) return;
+  if (ver >= 7 && load(KEYS.users, null)) return;
 
   Object.values(KEYS).forEach((k) => localStorage.removeItem(k));
+  localStorage.removeItem('ef_settings');
 
   const trainer = {
     id: 'u_trainer',
@@ -413,11 +414,11 @@ export function seedIfNeeded() {
           unitStandardId: '110021',
           unitStandardTitle: 'Achieve personal effectiveness in business environment',
           outcomes: [
-            'Greet and identify the organisation clearly',
-            'Listen fully before responding',
-            'Hand over a call with a short summary',
+            'Greet callers professionally',
+            'Take a complete message with callback details',
+            'Explain when to escalate a customer issue',
           ],
-          body: 'Greet clearly, use the organisation name, listen fully before responding, and agree a next step. Note the caller name and reference number. If you cannot help, transfer with a brief summary so the customer does not repeat everything.',
+          body: 'Answer promptly, greet with the organisation name, listen actively, take a full message (who, company, number, reason), and agree a follow-up time. Escalate angry or complex issues early with facts.',
         },
         {
           id: 'ba_a1',
@@ -426,14 +427,14 @@ export function seedIfNeeded() {
           order: 5,
           nqfLevel: 4,
           credits: 10,
-          unitStandardId: '13929',
-          unitStandardTitle: 'Co-ordinate meetings, minor events and travel arrangements',
+          unitStandardId: '110021',
+          unitStandardTitle: 'Achieve personal effectiveness in business environment',
           outcomes: [
-            'Write a complete meeting confirmation email',
-            'Include date, time, venue and agenda request',
-            'Use a professional tone and structure',
+            'Write a clear subject line',
+            'Produce a polite, complete meeting confirmation',
+            'Include date, time, place and any preparation needed',
           ],
-          body: 'A client asks for confirmation of a meeting next Tuesday at 10:00, venue Boardroom B, and a one-page agenda. Write the full email you would send (subject line + body).',
+          body: 'Write a professional email confirming a meeting with a client or internal team. Include subject line, greeting, purpose, date/time/place, what to prepare, and a polite close.',
           assignmentId: 'asg_ba1',
         },
       ],
@@ -455,18 +456,68 @@ export function seedIfNeeded() {
     { learnerId: 'u_l1', courseId: 'c_pm4', completedLessonIds: ['pm_g1', 'pm_m1'], percent: 40 },
   ];
 
-  const messages = [
-    { id: 'msg1', toUserId: 'u_l1', toEmail: 'learner1@gmail.com', subject: 'Welcome to EduFlow', body: 'Your application/enrolment updates and results will be sent to this Gmail address.', at: new Date().toISOString(), read: false },
+  // Pitch-ready: one assignment waiting for the trainer to grade
+  const submissions = [
+    {
+      id: 'sub_demo1',
+      assignmentId: 'asg_pm1',
+      courseId: 'c_pm4',
+      learnerId: 'u_l1',
+      text:
+        'Goal: Roll out a simple inventory checklist for the workshop store within 4 weeks.\n' +
+        'Tasks: (1) List stock categories (2) Draft checklist template (3) Pilot with two staff (4) Collect feedback (5) Finalise and train team.\n' +
+        'Owners: Store supervisor + admin assistant.\n' +
+        'Risk: Staff skip the form under pressure — mitigation: 5-minute toolbox talk and supervisor sign-off.',
+      status: 'submitted',
+      submittedAt: new Date().toISOString(),
+      score: null,
+      feedback: '',
+      rubricScores: null,
+      history: [],
+    },
   ];
+
+  const messages = [
+    {
+      id: 'msg1',
+      toUserId: 'u_l1',
+      toEmail: 'learner1@gmail.com',
+      subject: 'Welcome to EduFlow',
+      body: 'Your application/enrolment updates and results will be sent to this Gmail address.',
+      at: new Date().toISOString(),
+      read: false,
+    },
+    {
+      id: 'msg2',
+      toUserId: 'u_l2',
+      toEmail: 'james.molefe@gmail.com',
+      subject: 'Application received — Generic Management',
+      body: 'We received your access request. An administrator will approve or reject shortly.',
+      at: new Date().toISOString(),
+      read: false,
+    },
+  ];
+
+  // Provider branding — edit under More → Provider settings before the client meeting
+  const settings = {
+    providerName: 'EduFlow Training Provider',
+    contactEmail: 'admin@eduflow.test',
+    supportPhone: '+27 00 000 0000',
+    welcomeMessage:
+      'Welcome to your learning programme. Complete guides, modules and assessments to progress. Results and notices are linked to your Gmail.',
+    passMarkDefault: 70,
+    certificateFooter: 'This is a demo certificate for pilot modules only — not an official SETA statement of results.',
+  };
 
   save(KEYS.users, [trainer, ...learners], { silent: true });
   save(KEYS.courses, courses, { silent: true });
   save(KEYS.enrolments, enrolments, { silent: true });
   save(KEYS.assignments, assignments, { silent: true });
-  save(KEYS.submissions, [], { silent: true });
+  save(KEYS.submissions, submissions, { silent: true });
   save(KEYS.progress, progress, { silent: true });
   save(KEYS.attempts, [], { silent: true });
   save(KEYS.applications, [], { silent: true });
   save(KEYS.messages, messages, { silent: true });
-  save('ef_seed_ver', 6, { silent: true });
+  save('ef_settings', settings, { silent: true });
+  save('ef_seed_ver', 7, { silent: true });
 }
