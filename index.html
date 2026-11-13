@@ -80,8 +80,14 @@
     <nav class="bottom-nav" id="bottom-nav"></nav>
   </div>
 
-  <script type="module" src="js/app.js"></script>
+  <script type="module" src="js/app.js?v=20261113b"></script>
   <script>
+    // Never leave the user stuck on the splash screen
+    setTimeout(function () {
+      var s = document.getElementById('splash');
+      if (s) s.classList.add('hide');
+    }, 2500);
+
     // PWA install prompt
     let deferredPrompt = null;
     const btnInstall = document.getElementById('btn-install-app');
@@ -101,10 +107,10 @@
       btnInstall.classList.add('d-none');
     });
 
-    // Service worker (offline + installable)
+    // Service worker (offline + installable) — update on next load
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js').catch(() => {});
+        navigator.serviceWorker.register('./sw.js?v=20261113b').catch(() => {});
       });
     }
   </script>
