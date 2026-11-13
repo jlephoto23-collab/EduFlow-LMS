@@ -15,6 +15,8 @@ Use this for a **10–15 minute** walkthrough with a training provider.
 
 Tip: open **two browser windows** (or phone + laptop) to show live tab-sync.
 
+If the dashboard does not show **Pending access: 1** and **To grade: 1**, hard-refresh (`Ctrl+F5`), or sign in as admin → **More → Reset demo data**.
+
 ---
 
 ## Suggested script (about 12 minutes)
@@ -23,15 +25,15 @@ Tip: open **two browser windows** (or phone + laptop) to show live tab-sync.
 
 > “EduFlow is a mobile-first LMS for training providers. Learners apply, get approved, complete modules and assessments, and receive results — including on their Gmail. Today’s demo is live on the web with sample NQF Level 4 programmes.”
 
-Open the **live demo** link. Point out the dark, app-like UI and **Install** / Add to Home Screen if on mobile.
+Open the **live demo** link. Point out the dark, app-like UI and **Install App** / Add to Home Screen if on mobile.
 
 ### 2. Administrator (5 min)
 
 1. Sign in as **admin@eduflow.test** / **admin123**.
-2. **Dashboard** — programmes, learners, pending access, to grade (tiles open the right screens).
+2. **Dashboard** — Programmes **3**, Learners **3**, Pending access **1**, To grade **1** (tiles open the right screens).
 3. **Programmes** — open one NQF course; show **SAQA ID**, unit standards, learning outcomes.
-4. **Approvals** — approve a pending application (or note the sample pending request).
-5. **Grade** — open a submission (or have a learner submit first):
+4. **Approvals** — approve James Molefe’s Generic Management request.
+5. **Grade** — open Aisha’s mini project plan:
    - **Rubric** (Content / Structure / Application)
    - **Feedback** to the learner
    - **Save result** or **Save all marks** (bulk)
@@ -45,8 +47,8 @@ Open the **live demo** link. Point out the dark, app-like UI and **Install** / A
 3. **Courses** — apply for a programme (Gmail-linked).
 4. Open a course → **learner guide / module** → mark complete.
 5. **Quiz** — complete; show auto score and pass/fail.
-6. **Assignment** — submit 20+ characters.
-7. After admin grades: **Results** (mark + feedback) and **Inbox** (notification).
+6. **Assignment** — submit 20+ characters (or show graded result after admin marks).
+7. **Results** (mark + feedback) and **Inbox** (notification).
 8. If mark is below pass mark → show **Resubmit for marking**.
 
 ### 4. Close (2 min)
@@ -66,15 +68,21 @@ Hand them:
 - **NQF / SAQA-aligned** pilot content (register references + original pilot wording)
 - **Gmail-linked** learner communications (inbox + mailto)
 - **Rubrics, feedback, resubmit, bulk grade**
-- Works on **phone browser**; installable as **PWA**; Android APK path documented in `BUILD.md`
+- Works on **phone browser**; installable as **PWA**; Android APK path in `BUILD.md`
 
 ---
 
 ## Before the meeting checklist
 
-- [ ] Live demo opens after hard-refresh (`Ctrl+F5`)
-- [ ] Admin and learner logins work
-- [ ] Provider settings set to the client’s name/email
-- [ ] One assignment is ready to grade (or submit live)
-- [ ] Second window ready to show live sync
-- [ ] Phone ready for “Add to Home Screen” if Wi‑Fi allows
+- [x] Live demo URL live (GitHub Pages)
+- [x] Admin and learner demo accounts
+- [x] Provider settings seeded (edit to client name in meeting)
+- [x] Sample assignment ready to grade (seed v7)
+- [x] Sample pending access request (seed v7)
+- [x] Auto-upgrade from older seed (6 → 7) on refresh
+- [x] PWA Install App + service worker
+- [x] Capacitor / Android build path (`BUILD.md`)
+- [ ] Your action: hard-refresh live site (`Ctrl+F5`)
+- [ ] Your action: set Provider settings to the client’s name
+- [ ] Your action: second window ready for live sync (optional)
+- [ ] Your action: phone ready for Add to Home Screen (optional)
