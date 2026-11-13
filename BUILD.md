@@ -1,12 +1,22 @@
 # EduFlow LMS — Build & run guide
 
-Static web app (HTML / CSS / JS). No heavy compile step for the web demo.
+Three ways to show or ship the app:
+
+1. **Local / live web** — browser demo for the client  
+2. **PWA** — Install App / Add to Home Screen  
+3. **Android APK** — Capacitor + Android Studio  
 
 ---
 
-## 1. Run locally (for development & offline demo)
+## 1. Web demo (local + live)
 
-### Option A — npm (recommended)
+### Live (share with client)
+
+**https://jlephoto23-collab.github.io/EduFlow-LMS/**
+
+Hard-refresh after deploys: `Ctrl+F5`.
+
+### Local (backup if Wi‑Fi fails)
 
 ```bash
 git clone https://github.com/jlephoto23-collab/EduFlow-LMS.git
@@ -16,123 +26,9 @@ npm start
 
 Open **http://localhost:3000**
 
-### Option B — Python
+Or: `python3 -m http.server 3000`
 
-```bash
-cd EduFlow-LMS
-python3 -m http.server 3000
-```
-
-Open **http://localhost:3000**
-
-### Option C — VS Code
-
-Install “Live Server” → right-click `index.html` → **Open with Live Server**.
-
-> Do **not** open `index.html` as a `file://` URL — ES modules need an HTTP server.
-
----
-
-## 2. Live website (already online)
-
-**https://jlephoto23-collab.github.io/EduFlow-LMS/**
-
-GitHub Pages serves the `main` branch root. After you push changes, wait 1–2 minutes and hard-refresh (`Ctrl+F5`).
-
----
-
-## 3. Install as PWA (phone / desktop)
-
-1. Open the live URL (or localhost) in **Chrome** or **Edge**.
-2. Menu → **Install app** / **Add to Home screen**.
-3. EduFlow opens full-screen like a native app.
-
-`manifest.json` and theme colours are already set.
-
----
-
-## 4. Build Android APK (Capacitor)
-
-### Prerequisites
-
-- Node.js 18+
-- Android Studio (with Android SDK)
-- Java 17 (Android Studio usually provides this)
-
-### Steps
-
-```bash
-cd EduFlow-LMS
-npm install   # optional; scripts use npx
-
-# Add Android platform (first time only)
-npx cap add android
-
-# Copy web assets into the native project
-npx cap sync
-
-# Open in Android Studio
-npx cap open android
-```
-
-In **Android Studio**:
-
-1. Wait for Gradle sync to finish.
-2. **Build → Build Bundle(s) / APK(s) → Build APK(s)**.
-3. Install the APK on a device or emulator (**Run ▶**).
-
-`capacitor.config.json` uses:
-
-- **appId:** `com.eduflow.lms`
-- **appName:** EduFlow LMS  
-- **webDir:** `.` (project root)
-
-### Notes
-
-- For production, prefer a release-signed APK/AAB in Play Console.
-- Demo data uses **localStorage** on the device until Firebase is enabled.
-- To point the app at the live site instead of bundled files, you can set a Capacitor server URL (optional advanced setup).
-
----
-
-## 5. Firebase (production multi-user)
-
-See **README.md**. Summary:
-
-1. Create a Firebase project → enable **Email/Password** auth.
-2. Create **Firestore** database.
-3. Paste config into `js/firebase-config.js`.
-4. Add authorized domain for GitHub Pages.
-5. Hard-refresh — badge can show **Live cloud** when configured.
-
-Until then, the app runs in **demo mode** (localStorage + tab sync).
-
----
-
-## 6. Project structure
-
-```
-EduFlow-LMS/
-  index.html          # Shell + login + app frame
-  manifest.json       # PWA
-  package.json        # npm scripts
-  capacitor.config.json
-  css/styles.css
-  icons/icon.svg
-  js/
-    app.js            # Loader (assembles app chunks)
-    c0.js … c17.js    # App logic chunks
-    store.js          # Data + seed + live sync
-    firebase.js       # Cloud helpers
-    firebase-config.js
-  PITCH.md            # Client presentation script
-  BUILD.md            # This file
-  README.md
-```
-
----
-
-## 7. Demo credentials
+> Do **not** open `index.html` as `file://` — modules need HTTP.
 
 | Role | Email | Password |
 |------|--------|----------|
@@ -141,12 +37,108 @@ EduFlow-LMS/
 
 ---
 
+## 2. PWA (Install App)
+
+Already configured: `manifest.json`, icon, **service worker** (`sw.js`), **Install App** button on the login screen.
+
+### Phone or desktop
+
+1. Open the **live URL** in Chrome or Edge (HTTPS).
+2. Wait a moment — **Install App** may appear on the login screen.
+3. Or use browser menu → **Install app** / **Add to Home screen**.
+4. EduFlow opens full-screen like a native app (works offline for cached screens).
+
+iPhone (Safari): Share → **Add to Home Screen**.
+
+---
+
+## 3. Android APK (Capacitor)
+
+### Prerequisites
+
+- Node.js 18+
+- Android Studio + Android SDK
+- Java 17 (bundled with Android Studio is fine)
+
+### One-time + build
+
+```bash
+cd EduFlow-LMS
+npm install
+
+# Builds www/ then adds Android platform (first time only)
+npm run cap:add
+
+# After any web change: rebuild www/ + sync native project
+npm run cap:sync
+
+# Open Android Studio
+npm run cap:open
+```
+
+Or all-in-one:
+
+```bash
+npm run android
+```
+
+In **Android Studio**:
+
+1. Wait for Gradle sync.
+2. **Build → Build Bundle(s) / APK(s) → Build APK(s)**.
+3. Or press **Run ▶** on an emulator / USB device.
+
+### Config
+
+| Setting | Value |
+|---------|--------|
+| appId | `com.eduflow.lms` |
+| appName | EduFlow LMS |
+| webDir | `www` (created by `npm run build`) |
+
+`npm run build` copies `index.html`, `css/`, `js/`, `icons/`, `manifest.json`, `sw.js` into **`www/`** for a clean native package.
+
+### Notes
+
+- First launch seeds **demo data** on the device (localStorage).
+- For Play Store, use a **release-signed** AAB.
+- Production multi-user: enable Firebase (see README).
+
+---
+
+## Firebase (optional production)
+
+1. Firebase project → Email/Password auth + Firestore  
+2. Paste config into `js/firebase-config.js`  
+3. Authorize `jlephoto23-collab.github.io`  
+4. `npm run cap:sync` if you also ship APK  
+
+Until then the app stays in **demo mode** (local + tab sync).
+
+---
+
+## Project layout
+
+```
+EduFlow-LMS/
+  index.html, manifest.json, sw.js
+  package.json, capacitor.config.json
+  scripts/prepare-www.mjs   → builds www/
+  css/  icons/  js/
+  PITCH.md   BUILD.md   README.md
+  www/       (generated — do not commit)
+  android/   (generated by Capacitor — do not commit)
+```
+
+---
+
 ## Troubleshooting
 
 | Issue | Fix |
 |-------|-----|
-| Blank page / module errors | Use `npm start`, not `file://` |
-| Old UI after deploy | Hard-refresh `Ctrl+F5` |
-| Login fails | Use exact demo emails above; or **More → Reset demo data** after login as admin |
-| Capacitor sync fails | Install Android Studio SDK; run `npx cap sync` again |
-| APK has no data | Normal — first launch seeds localStorage on device |
+| Blank page | Use `npm start`, not `file://` |
+| Old UI | Hard-refresh `Ctrl+F5` |
+| Login fails | Exact demo emails above |
+| `cap sync` / missing www | Run `npm run build` first |
+| Install button hidden | Chrome needs engagement/HTTPS; use browser “Install app” menu |
+| APK empty data | Normal — seeds on first open |
