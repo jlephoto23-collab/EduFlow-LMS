@@ -7,12 +7,24 @@ export function runFullSeed(save, KEYS) {
     password: 'admin123',
     role: 'trainer',
     gmail: 'admin@eduflow.test',
+    status: 'approved',
   };
   const learners = [
-    { id: 'u_l1', name: 'Aisha Learner', email: 'learner1@gmail.com', password: 'learner123', role: 'learner', gmail: 'learner1@gmail.com' },
-    { id: 'u_l2', name: 'James Molefe', email: 'james.molefe@gmail.com', password: 'learner123', role: 'learner', gmail: 'james.molefe@gmail.com' },
-    { id: 'u_l3', name: 'Naledi Khumalo', email: 'naledi.k@gmail.com', password: 'learner123', role: 'learner', gmail: 'naledi.k@gmail.com' },
+    { id: 'u_l1', name: 'Aisha Learner', email: 'learner1@gmail.com', password: 'learner123', role: 'learner', gmail: 'learner1@gmail.com', status: 'approved' },
+    { id: 'u_l2', name: 'James Molefe', email: 'james.molefe@gmail.com', password: 'learner123', role: 'learner', gmail: 'james.molefe@gmail.com', status: 'approved' },
+    { id: 'u_l3', name: 'Naledi Khumalo', email: 'naledi.k@gmail.com', password: 'learner123', role: 'learner', gmail: 'naledi.k@gmail.com', status: 'approved' },
   ];
+  const pendingUser = {
+    id: 'u_pending',
+    name: 'Thabo Applicant',
+    email: 'thabo.apply@gmail.com',
+    password: 'pending123',
+    role: 'learner',
+    gmail: 'thabo.apply@gmail.com',
+    status: 'pending',
+    preferredProgrammeId: 'c_pm4',
+    appliedAt: new Date().toISOString(),
+  };
   const courses = [
     {
       id: 'c_pm4',
@@ -154,6 +166,7 @@ export function runFullSeed(save, KEYS) {
   const messages = [
     { id: 'msg1', toUserId: 'u_l1', toEmail: 'learner1@gmail.com', subject: 'Welcome to EduFlow', body: 'Updates go to your Gmail.', at: new Date().toISOString(), read: false },
     { id: 'msg2', toUserId: 'u_l2', toEmail: 'james.molefe@gmail.com', subject: 'Application received', body: 'Documents received for review.', at: new Date().toISOString(), read: false },
+    { id: 'msg3', toUserId: 'u_pending', toEmail: 'thabo.apply@gmail.com', subject: 'Application received — awaiting approval', body: 'Your account application is under review.', at: new Date().toISOString(), read: false },
   ];
 
   const settings = {
@@ -165,16 +178,31 @@ export function runFullSeed(save, KEYS) {
     certificateFooter: 'Demo certificate only — not an official SETA statement of results.',
   };
 
-  save(KEYS.users, [trainer, ...learners], { silent: true });
+  save(KEYS.users, [trainer, ...learners, pendingUser], { silent: true });
   save(KEYS.courses, courses, { silent: true });
   save(KEYS.enrolments, enrolments, { silent: true });
   save(KEYS.assignments, assignments, { silent: true });
   save(KEYS.submissions, submissions, { silent: true });
   save(KEYS.progress, progress, { silent: true });
   save(KEYS.attempts, [], { silent: true });
-  save(KEYS.applications, [], { silent: true });
+  save(KEYS.applications, [{
+    id: 'app_demo1',
+    userId: 'u_pending',
+    name: 'Thabo Applicant',
+    email: 'thabo.apply@gmail.com',
+    phone: '+27 82 000 0000',
+    programmeId: 'c_pm4',
+    notes: 'Interested in project admin support role.',
+    documents: {
+      idCopy: { name: 'thabo-id.pdf', type: 'application/pdf', size: 100000, dataUrl: null, tooLarge: false },
+      matric: { name: 'thabo-matric.pdf', type: 'application/pdf', size: 120000, dataUrl: null, tooLarge: false },
+    },
+    status: 'pending',
+    submittedAt: new Date().toISOString(),
+    reviewNotes: '',
+  }], { silent: true });
   save(KEYS.messages, messages, { silent: true });
   save(KEYS.attendance, [], { silent: true });
   save('ef_settings', settings, { silent: true });
-  save('ef_seed_ver', 8, { silent: true });
+  save('ef_seed_ver', 9, { silent: true });
 }
