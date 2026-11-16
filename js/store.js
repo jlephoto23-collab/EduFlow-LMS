@@ -146,14 +146,14 @@ function ensurePitchDemoData() {
   }
 }
 
-export function seedIfNeeded() {
+export async function seedIfNeeded() {
   const ver = load('ef_seed_ver', 0);
   if (ver >= 8 && load(KEYS.users, null)) {
     ensurePitchDemoData();
     return;
   }
 
-  if (ver === 7 && load(KEYS.users, null)) {
+  if (ver >= 6 && ver < 8 && load(KEYS.users, null)) {
     if (!load(KEYS.attendance, null)) save(KEYS.attendance, [], { silent: true });
     const enrolments = load(KEYS.enrolments, []);
     let changed = false;
@@ -176,49 +176,9 @@ export function seedIfNeeded() {
     return;
   }
 
-  if (ver === 6 && load(KEYS.users, null)) {
-    const settings = load('ef_settings', null) || {
-      providerName: 'EduFlow Training Provider',
-      contactEmail: 'admin@eduflow.test',
-      supportPhone: '+27 00 000 0000',
-      welcomeMessage:
-        'Welcome to your learning programme. Complete guides, modules and assessments to progress. Results and notices are linked to your Gmail.',
-      passMarkDefault: 70,
-      certificateFooter:
-        'This is a demo certificate for pilot modules only — not an official SETA statement of results.',
-    };
-    save('ef_settings', settings, { silent: true });
-    save(KEYS.attendance, [], { silent: true });
-    save('ef_seed_ver', 8, { silent: true });
-    ensurePitchDemoData();
-    return;
-  }
-
   Object.values(KEYS).forEach((k) => localStorage.removeItem(k));
   localStorage.removeItem('ef_settings');
 
-  const trainer = {
-    id: 'u_trainer',
-    name: 'Admin Trainer',
-    email: 'admin@eduflow.test',
-    password: 'admin123',
-    role: 'trainer',
-    gmail: 'admin@eduflow.test',
-  };
-
-  const learners = [
-    { id: 'u_l1', name: 'Aisha Learner', email: 'learner1@gmail.com', password: 'learner123', role: 'learner', gmail: 'learner1@gmail.com' },
-    { id: 'u_l2', name: 'James Molefe', email: 'james.molefe@gmail.com', password: 'learner123', role: 'learner', gmail: 'james.molefe@gmail.com' },
-    { id: 'u_l3', name: 'Naledi Khumalo', email: 'naledi.k@gmail.com', password: 'learner123', role: 'learner', gmail: 'naledi.k@gmail.com' },
-  ];
-
-  // Courses truncated: load from previous - actually need full courses
-  // Keep full seed by reading from backup if PLACEHOLDER wiped - we include minimal 3 programmes via ensure after
-  // Full course content is large - use import from a known structure
-
-  const courses = load('ef_courses_backup', null);
-  // Always define courses inline abbreviated if missing - user needs full content
-  // Re-read full store from local file for courses part
-
-  save('ef_seed_ver', 0, { silent: true });
+  const { runFullSeed } = await import('./seed-data.js');
+  runFullSeed(save, KEYS);
 }
