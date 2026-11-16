@@ -95,6 +95,42 @@ function ensurePitchDemoData() {
     save(KEYS.attendance, [], { silent: true });
   }
 
+  const apps = load(KEYS.applications, []);
+  if (!apps.some((a) => a.status === 'pending')) {
+    const users = load(KEYS.users, []);
+    if (!users.some((u) => u.id === 'u_pending')) {
+      users.push({
+        id: 'u_pending',
+        name: 'Thabo Applicant',
+        email: 'thabo.apply@gmail.com',
+        password: 'pending123',
+        role: 'learner',
+        gmail: 'thabo.apply@gmail.com',
+        status: 'pending',
+        preferredProgrammeId: 'c_pm4',
+        appliedAt: new Date().toISOString(),
+      });
+      save(KEYS.users, users, { silent: true });
+    }
+    apps.push({
+      id: 'app_demo1',
+      userId: 'u_pending',
+      name: 'Thabo Applicant',
+      email: 'thabo.apply@gmail.com',
+      phone: '+27 82 000 0000',
+      programmeId: 'c_pm4',
+      notes: 'Interested in project admin support role.',
+      documents: {
+        idCopy: { name: 'thabo-id.pdf', type: 'application/pdf', size: 100000, dataUrl: null, tooLarge: false },
+        matric: { name: 'thabo-matric.pdf', type: 'application/pdf', size: 120000, dataUrl: null, tooLarge: false },
+      },
+      status: 'pending',
+      submittedAt: new Date().toISOString(),
+      reviewNotes: '',
+    });
+    save(KEYS.applications, apps, { silent: true });
+  }
+
   const subs = load(KEYS.submissions, []);
   const hasOpenSubmission = subs.some((s) => s.status === 'submitted');
   if (!hasOpenSubmission) {
@@ -148,12 +184,12 @@ function ensurePitchDemoData() {
 
 export async function seedIfNeeded() {
   const ver = load('ef_seed_ver', 0);
-  if (ver >= 8 && load(KEYS.users, null)) {
+  if (ver >= 9 && load(KEYS.users, null)) {
     ensurePitchDemoData();
     return;
   }
 
-  if (ver >= 6 && ver < 8 && load(KEYS.users, null)) {
+  if (ver >= 6 && ver < 9 && load(KEYS.users, null)) {
     if (!load(KEYS.attendance, null)) save(KEYS.attendance, [], { silent: true });
     const enrolments = load(KEYS.enrolments, []);
     let changed = false;
@@ -171,7 +207,17 @@ export async function seedIfNeeded() {
       }
     });
     if (changed) save(KEYS.enrolments, enrolments, { silent: true });
-    save('ef_seed_ver', 8, { silent: true });
+    // Migrate existing learners to approved status
+    const users = load(KEYS.users, []);
+    let uChanged = false;
+    users.forEach((u) => {
+      if (!u.status) {
+        u.status = u.role === 'trainer' ? 'approved' : 'approved';
+        uChanged = true;
+      }
+    });
+    if (uChanged) save(KEYS.users, users, { silent: true });
+    save('ef_seed_ver', 9, { silent: true });
     ensurePitchDemoData();
     return;
   }
