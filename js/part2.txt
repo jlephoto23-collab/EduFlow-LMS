@@ -1,0 +1,165 @@
+function renderAttendance() {
+  const s = getSession();
+  const courses = getCourses();
+  const attendance = getAttendance();
+
+  if (s.role === 'trainer') {
+    const users = load(KEYS.users, []).filter((u) => u.role === 'learner');
+    const rows = attendance.slice(0, 50);
+    content().innerHTML = `
+      <h2 class="page-title">Attendance register</h2>
+      <p class="text-secondary mb-3">Remote marks from learners (any location). Latest first.</p>
+      ${rows.length === 0 ? '<div class="empty">No attendance marked yet</div>' :
+        rows.map((a) => {
+          const learner = users.find((u) => u.id === a.learnerId);
+          const course = courses.find((c) => c.id === a.courseId);
+          return `<div class="list-card">
+            <h3>${escapeHtml(learner?.name || 'Learner')}</h3>
+            <p class="text-secondary small mb-1">${escapeHtml(course?.title || a.courseId)}</p>
+            <p class="mb-0"><span class="badge-soft badge-ok">${escapeHtml(a.date)}</span>
+              <span class="badge-soft">${escapeHtml(a.session || 'Remote')}</span>
+              <span class="text-secondary small"> · ${new Date(a.markedAt).toLocaleTimeString()}</span></p>
+          </div>`;
+        }).join('')}`;
+    return;
+  }
+
+  const enrolments = getEnrolments().filter((e) => e.learnerId === s.id && e.status === 'approved');
+  const day = todayISODate();
+  content().innerHTML = `
+    <h2 class="page-title">Mark attendance</h2>
+    <p class="text-secondary mb-3">Mark the register remotely for today (<strong>${day}</strong>). Works from anywhere.</p>
+    ${enrolments.length === 0
+      ? '<div class="empty">No approved programmes yet. Apply under Courses first.</div>'
+      : enrolments.map((e) => {
+          const c = courses.find((x) => x.id === e.courseId);
+          const already = attendance.find((a) => a.learnerId === s.id && a.courseId === e.courseId && a.date === day);
+          return `<div class="list-card">
+            <h3>${escapeHtml(c?.title || 'Programme')}</h3>
+            ${already
+              ? `<p class="mb-0"><span class="badge-soft badge-ok">Present today</span>
+                   <span class="text-secondary small"> · ${new Date(already.markedAt).toLocaleTimeString()}</span></p>`
+              : `<button class="btn btn-sm btn-primary" data-mark="${e.courseId}">Mark present (remote)</button>`}
+          </div>`;
+        }).join('')}
+    <div class="content-block mt-3">
+      <p class="text-secondary small mb-0">Your marks appear on the administrator attendance register immediately (live sync).</p>
+    </div>`;
+
+  content().querySelectorAll('[data-mark]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const result = markAttendance(s.id, btn.getAttribute('data-mark'), 'Remote session');
+      if (!result.ok) alert(result.message);
+      else {
+        pushMessage(s.id, s.gmail || s.email, 'Attendance marked', 'You marked present for today (' + day + ').');
+        renderAttendance();
+      }
+    });
+  });
+}
+
+function renderMessages() {
+  const s = getSession();
+  const messages = load(KEYS.messages, []).filter((m) => m.toUserId === s.id);
+  content().innerHTML = `<h2 class="page-title">Inbox</h2>` +
+    (messages.length === 0 ? '<div class="empty">No messages</div>' :
+      messages.map((m) => `<div class="list-card"><h3>${escapeHtml(m.subject)}</h3>
+        <p class="mb-0">${escapeHtml(m.body)}</p></div>`).join(''));
+}
+
+function renderAbout() {
+  content().innerHTML = `<h2 class="page-title">About EduFlow</h2>
+    <div class="content-block mb-3">
+      <p class="mb-2"><strong>Live on this demo</strong></p>
+      <ol class="text-secondary small mb-0">
+        <li><strong>Courses → Apply with documents</strong> (ID, Matric, certificates)</li>
+        <li><strong>Approvals with document review</strong> (admin opens files, approve/decline)</li>
+        <li><strong>Attend</strong> remote register (learners mark present from anywhere)</li>
+      </ol>
+    </div>
+    <div class="content-block">
+      <p class="mb-2"><strong>Uploads</strong></p>
+      <ul class="text-secondary small mb-0">
+        <li>Application: ID, Matric, other certificates, doctor note</li>
+        <li>Assignments: knowledge module evidence + practical evidence</li>
+        <li>Demo limit: 1.5MB per file (stored in browser)</li>
+      </ul>
+    </div>`;
+}
+
+async function bootEduFlow() {
+  await seedIfNeeded();
+  setTimeout(() => document.getElementById('splash')?.classList.add('hide'), 400);
+
+  document.getElementById('login-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const result = login(document.getElementById('email').value.trim(), document.getElementById('password').value);
+    const err = document.getElementById('login-error');
+    if (!result.ok) { err.textContent = result.message; err.classList.remove('d-none'); return; }
+    err.classList.add('d-none');
+    if (result.needsApplication) showApplicationStep(result.user);
+    else if (result.pending) showAwaitingApproval();
+    else showApp();
+  });
+
+  document.getElementById('btn-register')?.addEventListener('click', (e) => { e.preventDefault(); showRegisterPanel(); });
+  document.getElementById('btn-show-login')?.addEventListener('click', (e) => { e.preventDefault(); logout(); });
+  document.getElementById('btn-show-login-from-reg')?.addEventListener('click', (e) => { e.preventDefault(); showLogin(); });
+
+  document.getElementById('register-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const err = document.getElementById('reg-error');
+    err?.classList.add('d-none');
+    const result = createLearnerAccount({
+      name: document.getElementById('reg-name')?.value.trim() || '',
+      email: document.getElementById('reg-email')?.value.trim() || '',
+      phone: document.getElementById('reg-phone')?.value.trim() || '',
+      password: document.getElementById('reg-password')?.value || '',
+      password2: document.getElementById('reg-password2')?.value || '',
+    });
+    if (!result.ok) {
+      if (err) { err.textContent = result.message; err.classList.remove('d-none'); }
+      else alert(result.message);
+      return;
+    }
+    showApplicationStep(result.user);
+  });
+
+  document.getElementById('apply-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const err = document.getElementById('apply-error');
+    err?.classList.add('d-none');
+    const s = getSession();
+    if (!s) { alert('Please create an account first.'); showRegisterPanel(); return; }
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Uploading documents…'; }
+    try {
+      const hasDisability = !!document.getElementById('apply-disability')?.checked;
+      const idCopy = await readFilesFromInput(document.getElementById('apply-id'), false);
+      const matric = await readFilesFromInput(document.getElementById('apply-matric'), false);
+      const otherCerts = await readFilesFromInput(document.getElementById('apply-other'), true);
+      const disabilityNote = hasDisability ? await readFilesFromInput(document.getElementById('apply-note'), false) : null;
+      const result = submitApplicationForUser(s.id, {
+        programmeId: document.getElementById('apply-programme')?.value || '',
+        notes: document.getElementById('apply-notes')?.value.trim() || '',
+        documents: { hasDisability, idCopy, matric, otherCerts, disabilityNote },
+      });
+      if (!result.ok) {
+        if (err) { err.textContent = result.message; err.classList.remove('d-none'); }
+        else alert(result.message);
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit application'; }
+        return;
+      }
+      showAwaitingApproval();
+    } catch (ex) {
+      if (err) { err.textContent = 'Document upload failed. Use smaller files (max 1.5MB each).'; err.classList.remove('d-none'); }
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit application'; }
+    }
+  });
+
+  document.getElementById('btn-logout')?.addEventListener('click', logout);
+  if (getSession()) showApp(); else showLogin();
+}
+
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bootEduFlow);
+else bootEduFlow();
