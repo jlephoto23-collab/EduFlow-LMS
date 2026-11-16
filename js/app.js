@@ -1,5 +1,5 @@
 import {
-  KEYS, load,, save, uid, seedIfNeeded, onLiveChange, getLiveMode,
+  KEYS, load, save, uid, seedIfNeeded, onLiveChange, getLiveMode,
 } from './store.js';
 
 const MAX_FILE_BYTES = 1.5 * 1024 * 1024;
@@ -112,7 +112,7 @@ function submitApplicationForUser(userId, p) {
   if (!p.documents?.idCopy) return { ok: false, message: 'Please upload your ID / Smart ID' };
   if (!p.documents?.matric) return { ok: false, message: 'Please upload your Matric certificate' };
   if (p.documents.hasDisability && !p.documents.disabilityNote) {
-    return { ok: false, message: 'Doctor\'s note is required when disability is selected' };
+    return { ok: false, message: 'Doctor note is required when disability is selected' };
   }
   user.status = 'pending';
   user.preferredProgrammeId = p.programmeId;
@@ -153,7 +153,6 @@ function approveAccountApplication(appId, approve, reviewNotes) {
 }
 
 function logout() { setSession(null); showLogin(); }
-
 function hideAllAuthPanels() {
   ['login-panel','register-panel','apply-panel'].forEach((id) => document.getElementById(id)?.classList.add('d-none'));
 }
@@ -325,7 +324,7 @@ function renderApprovals() {
           <p class="mb-1">ID: ${fileLinkHtml(d.idCopy)}</p>
           <p class="mb-1">Matric: ${fileLinkHtml(d.matric)}</p>
           <p class="mb-1">Other: ${(d.otherCerts || []).length ? (d.otherCerts || []).map(fileLinkHtml).join(', ') : '—'}</p>
-          <p class="mb-0">Doctor\'s note: ${d.hasDisability ? fileLinkHtml(d.disabilityNote) : 'N/A'}</p>
+          <p class="mb-0">Doctor note: ${d.hasDisability ? fileLinkHtml(d.disabilityNote) : 'N/A'}</p>
         </div>
         <textarea class="form-control form-control-sm mb-2" id="acc-notes-${a.id}" rows="2" placeholder="Notes"></textarea>
         <button class="btn btn-sm btn-primary me-2" data-acc-approve="${a.id}">Approve access</button>
@@ -486,7 +485,7 @@ function openAssignmentLesson(courseId, lesson, isTrainer) {
       <button class="btn btn-sm btn-outline-light mb-2" id="btn-back-lesson"><i class="bi bi-arrow-left"></i> Back</button>
       <h2 class="page-title">${escapeHtml(lesson.title)}</h2>
       <div class="content-block">${formatBody(lesson.body)}</div>
-      <p class="text-secondary small">Learners upload knowledge + practical evidence before submit. Grade under Grade tab.</p>`;
+      <p class="text-secondary small">Learners upload knowledge + practical evidence before submit.</p>`;
     document.getElementById('btn-back-lesson')?.addEventListener('click', () => renderCourseDetail(courseId));
     return;
   }
@@ -536,12 +535,12 @@ function showAssignmentSubmitForm(courseId, lesson, previous) {
     <input type="file" id="asg-practical" class="form-control mb-2" accept=".pdf,.jpg,.jpeg,.png,.mp4,.mov,image/*,video/*,application/pdf">
     <p class="text-secondary small mb-3">Upload photos, checklist, or short practical proof. Max 1.5MB per file (demo limit).</p>
     <div id="asg-error" class="alert alert-danger d-none py-2"></div>
-    <button class="btn btn-primary w-100" id="btn-submit-asg">Upload & submit for marking</button>`;
+    <button class="btn btn-primary w-100" id="btn-submit-asg">Upload and submit for marking</button>`;
   document.getElementById('btn-back-lesson')?.addEventListener('click', () => renderCourseDetail(courseId));
   document.getElementById('btn-submit-asg')?.addEventListener('click', async () => {
     const err = document.getElementById('asg-error');
     err?.classList.add('d-none');
-    const text = document.getElementBy('assignment-text').value.trim();
+    const text = document.getElementById('assignment-text').value.trim();
     if (text.length < 20) {
       if (err) { err.textContent = 'Please write at least 20 characters in the knowledge response.'; err.classList.remove('d-none'); }
       return;
@@ -553,7 +552,7 @@ function showAssignmentSubmitForm(courseId, lesson, previous) {
       const practical = await readFilesFromInput(document.getElementById('asg-practical'), false);
       if (!knowledge && !practical) {
         if (err) { err.textContent = 'Upload at least one file: knowledge evidence and/or practical evidence.'; err.classList.remove('d-none'); }
-        if (btn) { btn.disabled = false; btn.textContent = 'Upload & submit for marking'; }
+        if (btn) { btn.disabled = false; btn.textContent = 'Upload and submit for marking'; }
         return;
       }
       const s = getSession();
@@ -578,7 +577,7 @@ function showAssignmentSubmitForm(courseId, lesson, previous) {
       openAssignmentLesson(courseId, lesson, false);
     } catch (e) {
       if (err) { err.textContent = 'Upload failed. Try smaller files (max 1.5MB each).'; err.classList.remove('d-none'); }
-      if (btn) { btn.disabled = false; btn.textContent = 'Upload & submit for marking'; }
+      if (btn) { btn.disabled = false; btn.textContent = 'Upload and submit for marking'; }
     }
   });
 }
@@ -633,7 +632,7 @@ function renderAbout() {
     <div class="content-block">
       <p class="mb-2"><strong>Uploads</strong></p>
       <ul class="text-secondary small mb-0">
-        <li>Application: ID, Matric, other certificates, doctor\'s note</li>
+        <li>Application: ID, Matric, other certificates, doctor note</li>
         <li>Assignments: knowledge module evidence + practical evidence</li>
         <li>Demo limit: 1.5MB per file (stored in browser)</li>
       </ul>
