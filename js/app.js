@@ -7,8 +7,10 @@ import {
   onLiveChange,
   getLiveMode,
 } from './store.js';
-import p1 from './payload1.js';
-import p2 from './payload2.js';
+import a from './pl0.js';
+import b from './pl1.js';
+import c from './pl2.js';
+import d from './pl3.js';
 
 Object.assign(globalThis, {
   KEYS,
@@ -20,7 +22,7 @@ Object.assign(globalThis, {
   getLiveMode,
 });
 
-const b64 = p1 + p2;
+const b64 = a + b + c + d;
 function b64ToU8(s) {
   const bin = atob(s);
   const arr = new Uint8Array(bin.length);
