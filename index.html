@@ -97,21 +97,21 @@
 
       <div id="apply-panel" class="d-none">
         <h2 class="h5 mb-1">Step 2 — Application</h2>
-        <p class="text-secondary small mb-3">Choose a programme and upload supporting documents. An administrator must approve you before you can use the full app.</p>
+        <p class="text-secondary small mb-3">Choose a programme and upload supporting documents. ID and Matric are required.</p>
         <form id="apply-form">
           <label class="form-label">Preferred programme</label>
           <select id="apply-programme" class="form-control mb-2" required></select>
-          <label class="form-label">ID / Smart ID (PDF or image)</label>
-          <input type="file" id="apply-id" class="form-control mb-2" accept=".pdf,.jpg,.jpeg,.png,image/*,application/pdf">
-          <label class="form-label">Matric certificate</label>
-          <input type="file" id="apply-matric" class="form-control mb-2" accept=".pdf,.jpg,.jpeg,.png,image/*,application/pdf">
+          <label class="form-label">ID / Smart ID (PDF or image) *</label>
+          <input type="file" id="apply-id" class="form-control mb-2" accept=".pdf,.jpg,.jpeg,.png,image/*,application/pdf" required>
+          <label class="form-label">Matric certificate *</label>
+          <input type="file" id="apply-matric" class="form-control mb-2" accept=".pdf,.jpg,.jpeg,.png,image/*,application/pdf" required>
           <label class="form-label">Other certificates (optional)</label>
           <input type="file" id="apply-other" class="form-control mb-2" accept=".pdf,.jpg,.jpeg,.png,image/*,application/pdf" multiple>
           <div class="form-check mb-2">
             <input class="form-check-input" type="checkbox" id="apply-disability">
-            <label class="form-check-label text-secondary small" for="apply-disability">I live with a disability (doctor’s note required)</label>
+            <label class="form-check-label text-secondary small" for="apply-disability">I live with a disability (doctor note required)</label>
           </div>
-          <label class="form-label">Doctor’s note (if applicable)</label>
+          <label class="form-label">Doctor note (if applicable)</label>
           <input type="file" id="apply-note" class="form-control mb-2" accept=".pdf,.jpg,.jpeg,.png,image/*,application/pdf">
           <label class="form-label">Notes for the provider</label>
           <textarea id="apply-notes" class="form-control mb-3" rows="2" placeholder="Optional"></textarea>
@@ -141,7 +141,7 @@
     <nav class="bottom-nav" id="bottom-nav"></nav>
   </div>
 
-  <script type="module" src="js/app.js?v=20261116d"></script>
+  <script type="module" src="js/app.js?v=20261116e"></script>
   <script>
     setTimeout(function () {
       var s = document.getElementById('splash');
@@ -168,7 +168,7 @@
 
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=20261116d').catch(() => {});
+        navigator.serviceWorker.register('./sw.js?v=20261116e').catch(() => {});
       });
     }
   </script>
