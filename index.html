@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="EduFlow">
-  <meta name="description" content="EduFlow LMS — create account, apply, get approved, then learn">
+  <meta name="description" content="EduFlow LMS — apply with documents, approvals, remote attendance">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon.svg">
@@ -38,11 +38,7 @@
       </a>
 
       <div id="auth-steps" class="d-flex justify-content-center gap-2 mb-3" style="font-size:.75rem;color:#94a3b8">
-        <span id="step-1-label">1. Create account</span>
-        <span>→</span>
-        <span id="step-2-label">2. Apply</span>
-        <span>→</span>
-        <span id="step-3-label">3. Get approved</span>
+        <span>1. Create account</span><span>→</span><span>2. Apply</span><span>→</span><span>3. Get approved</span>
       </div>
 
       <div id="login-panel">
@@ -54,17 +50,9 @@
           <div id="login-error" class="alert alert-danger d-none py-2"></div>
           <button type="submit" class="btn btn-primary btn-lg w-100">Sign in</button>
         </form>
-
-        <button type="button" id="btn-install-app" class="btn btn-outline-light w-100 mt-3 d-none">
-          <i class="bi bi-download"></i> Install App
-        </button>
-        <p id="install-hint" class="text-secondary small text-center mt-2 mb-0">
-          On phone: browser menu → <strong>Add to Home screen</strong>
-        </p>
-
-        <p class="text-center mt-3 mb-0">
-          <a href="#" id="btn-register" class="link-light" style="color:#93c5fd">New learner? Create account</a>
-        </p>
+        <button type="button" id="btn-install-app" class="btn btn-outline-light w-100 mt-3 d-none"><i class="bi bi-download"></i> Install App</button>
+        <p id="install-hint" class="text-secondary small text-center mt-2 mb-0">On phone: browser menu → <strong>Add to Home screen</strong></p>
+        <p class="text-center mt-3 mb-0"><a href="#" id="btn-register" class="link-light" style="color:#93c5fd">New learner? Create account</a></p>
         <div class="demo-box demo-accounts mt-3">
           <strong>Demo accounts</strong>
           <div>Admin: admin@eduflow.test / admin123</div>
@@ -90,9 +78,7 @@
           <div id="reg-error" class="alert alert-danger d-none py-2"></div>
           <button type="submit" class="btn btn-primary btn-lg w-100">Create account & continue</button>
         </form>
-        <p class="text-center mt-3 mb-0">
-          <a href="#" id="btn-show-login-from-reg" class="link-light" style="color:#93c5fd">Already have an account? Sign in</a>
-        </p>
+        <p class="text-center mt-3 mb-0"><a href="#" id="btn-show-login-from-reg" class="link-light" style="color:#93c5fd">Already have an account? Sign in</a></p>
       </div>
 
       <div id="apply-panel" class="d-none">
@@ -118,9 +104,7 @@
           <div id="apply-error" class="alert alert-danger d-none py-2"></div>
           <button type="submit" class="btn btn-primary btn-lg w-100">Submit application</button>
         </form>
-        <p class="text-center mt-3 mb-0">
-          <a href="#" id="btn-show-login" class="link-light" style="color:#93c5fd">Sign out / back to sign in</a>
-        </p>
+        <p class="text-center mt-3 mb-0"><a href="#" id="btn-show-login" class="link-light" style="color:#93c5fd">Sign out / back to sign in</a></p>
       </div>
     </div>
   </div>
@@ -141,13 +125,12 @@
     <nav class="bottom-nav" id="bottom-nav"></nav>
   </div>
 
-  <script type="module" src="js/app.js?v=20261116e"></script>
+  <script type="module" src="js/app.js?v=20261116f"></script>
   <script>
     setTimeout(function () {
       var s = document.getElementById('splash');
       if (s) s.classList.add('hide');
     }, 2500);
-
     let deferredPrompt = null;
     const btnInstall = document.getElementById('btn-install-app');
     window.addEventListener('beforeinstallprompt', (e) => {
@@ -156,19 +139,15 @@
       btnInstall?.classList.remove('d-none');
     });
     btnInstall?.addEventListener('click', async () => {
-      if (!deferredPrompt) {
-        alert('Use your browser menu: Add to Home screen / Install app.');
-        return;
-      }
+      if (!deferredPrompt) { alert('Use your browser menu: Add to Home screen / Install app.'); return; }
       deferredPrompt.prompt();
       await deferredPrompt.userChoice;
       deferredPrompt = null;
       btnInstall.classList.add('d-none');
     });
-
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=20261116e').catch(() => {});
+        navigator.serviceWorker.register('./sw.js?v=20261116f').catch(() => {});
       });
     }
   </script>
