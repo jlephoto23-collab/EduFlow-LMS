@@ -1,11 +1,52 @@
 import {
-  KEYS, load, save, uid, seedIfNeeded, onLiveChange, getLiveMode,
+  KEYS, load,, save, uid, seedIfNeeded, onLiveChange, getLiveMode,
 } from './store.js';
+
+const MAX_FILE_BYTES = 1.5 * 1024 * 1024;
 
 function escapeHtml(s) {
   return String(s ?? '').replace(/&/g,'&').replace(/</g,'<').replace(/>/g,'>').replace(/"/g,'"');
 }
 function formatBody(t) { return escapeHtml(t || '').replace(/\n/g, '<br>'); }
+function formatSize(n) {
+  if (n == null) return '';
+  if (n < 1024) return n + ' B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+  return (n / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function readFileAsMeta(file) {
+  return new Promise((resolve) => {
+    if (!file) return resolve(null);
+    const meta = { name: file.name, type: file.type || 'application/octet-stream', size: file.size, dataUrl: null, tooLarge: false };
+    if (file.size > MAX_FILE_BYTES) {
+      meta.tooLarge = true;
+      return resolve(meta);
+    }
+    const reader = new FileReader();
+    reader.onload = () => { meta.dataUrl = reader.result; resolve(meta); };
+    reader.onerror = () => resolve(meta);
+    reader.readAsDataURL(file);
+  });
+}
+
+async function readFilesFromInput(inputEl, multiple) {
+  const files = inputEl?.files ? Array.from(inputEl.files) : [];
+  if (!files.length) return multiple ? [] : null;
+  if (!multiple) return readFileAsMeta(files[0]);
+  const out = [];
+  for (const f of files) out.push(await readFileAsMeta(f));
+  return out;
+}
+
+function fileLinkHtml(doc) {
+  if (!doc) return '<span class="text-secondary">Not uploaded</span>';
+  const label = `${escapeHtml(doc.name)} (${formatSize(doc.size)})`;
+  if (doc.tooLarge) return `<span class="badge-soft badge-warn">${label} — too large (max 1.5MB)</span>`;
+  if (doc.dataUrl) return `<a href="${doc.dataUrl}" target="_blank" rel="noopener" style="color:#93c5fd">${label}</a>`;
+  return `<span class="text-secondary">${label}</span>`;
+}
+
 function getSession() { return load(KEYS.session, null); }
 function setSession(user) {
   if (!user) { localStorage.removeItem(KEYS.session); return; }
@@ -21,7 +62,6 @@ function getCourse(id) { return getCourses().find((c) => c.id === id); }
 function getEnrolments() { return load(KEYS.enrolments, []); }
 function saveEnrolments(list) { save(KEYS.enrolments, list); }
 function getSubmissions() { return load(KEYS.submissions, []); }
-function getAssignments() { return load(KEYS.assignments, []); }
 function content() { return document.getElementById('content'); }
 function bottomNav() { return document.getElementById('bottom-nav'); }
 
@@ -69,6 +109,11 @@ function submitApplicationForUser(userId, p) {
   const user = users.find((u) => u.id === userId);
   if (!user) return { ok: false, message: 'Account not found. Please sign in again.' };
   if (!p.programmeId) return { ok: false, message: 'Please select a preferred programme' };
+  if (!p.documents?.idCopy) return { ok: false, message: 'Please upload your ID / Smart ID' };
+  if (!p.documents?.matric) return { ok: false, message: 'Please upload your Matric certificate' };
+  if (p.documents.hasDisability && !p.documents.disabilityNote) {
+    return { ok: false, message: 'Doctor\'s note is required when disability is selected' };
+  }
   user.status = 'pending';
   user.preferredProgrammeId = p.programmeId;
   user.appliedAt = new Date().toISOString();
@@ -81,7 +126,7 @@ function submitApplicationForUser(userId, p) {
   });
   save(KEYS.applications, apps);
   pushMessage(user.id, user.gmail || user.email, 'Application received — awaiting approval',
-    'Your application is under review. You get full app access after an administrator approves you.');
+    'Your application and documents are under review.');
   setSession(user);
   return { ok: true, user, pending: true };
 }
@@ -101,7 +146,7 @@ function approveAccountApplication(appId, approve, reviewNotes) {
     save(KEYS.users, users);
     pushMessage(user.id, user.gmail || user.email,
       approve ? 'Application approved — you may access EduFlow' : 'Application not approved',
-      approve ? 'Your account is approved. Sign in to choose a programme and start learning.'
+      approve ? 'Your account is approved. Sign in to start learning.'
               : 'Not approved. ' + (reviewNotes || 'Contact the training provider.'));
   }
   return true;
@@ -149,10 +194,8 @@ function showAwaitingApproval() {
     <div class="content-block text-center" style="margin-top:2rem">
       <div class="splash-logo sm" style="margin:0 auto 1rem">E</div>
       <h2 class="page-title">Step 3 — Waiting for approval</h2>
-      <p class="text-secondary">Hi ${escapeHtml(s?.name || '')}. Account created and application submitted.</p>
-      <p class="text-secondary">An administrator must approve your access before programmes unlock.</p>
+      <p class="text-secondary">Hi ${escapeHtml(s?.name || '')}. Application and documents received.</p>
       <p class="mb-3"><span class="badge-soft badge-warn">Status: Pending approval</span></p>
-      <p class="text-secondary small">We will notify <strong>${escapeHtml(s?.gmail || s?.email || '')}</strong>.</p>
       <button type="button" class="btn btn-outline-light w-100 mt-3" id="btn-pending-logout">Sign out</button>
       <button type="button" class="btn btn-primary w-100 mt-2" id="btn-pending-refresh">Check status</button>
     </div>`;
@@ -161,7 +204,7 @@ function showAwaitingApproval() {
     const u = load(KEYS.users, []).find((x) => x.id === s.id);
     if (u?.status === 'approved') { setSession(u); showApp(); return; }
     if (u?.status === 'rejected') { alert('Application was not approved.'); logout(); return; }
-    alert('Still pending. Please check again later.');
+    alert('Still pending.');
   });
 }
 
@@ -232,15 +275,14 @@ function renderTrainerHome() {
   const learners = load(KEYS.users, []).filter((u) => u.role === 'learner' && !['pending','registered'].includes(u.status || 'approved'));
   content().innerHTML = `
     <h2 class="page-title">Administrator dashboard</h2>
-    <p class="text-secondary small mb-3">Learner path: Create account → Apply → Approve → Access</p>
+    <p class="text-secondary small mb-3">Create account → Apply with documents → Approve → Access</p>
     <div class="card-grid mb-3">
       <div class="stat-card stat-link" data-dash="programmes" role="button"><div class="label">Programmes</div><div class="value">${courses.length}</div></div>
       <div class="stat-card stat-link" data-dash="learners" role="button"><div class="label">Learners</div><div class="value">${learners.length}</div></div>
       <div class="stat-card stat-link" data-dash="pending" role="button"><div class="label">Pending access</div><div class="value">${pending}</div></div>
       <div class="stat-card stat-link" data-dash="grade" role="button"><div class="label">To grade</div><div class="value">${toGrade}</div></div>
     </div>
-    ${pending ? `<div class="list-card list-link" style="border-color:#eab308" data-dash="pending" role="button"><h3>Applications</h3><p>${pendingAccounts} account · ${pendingEnrol} course. Open Approvals.</p></div>` : ''}
-    <div class="content-block mt-3"><p class="text-secondary small mb-0"><strong>Demo:</strong> Log out → Create account as a new learner → Apply → Approve under Approvals → sign in again for full access.</p></div>`;
+    ${pending ? `<div class="list-card list-link" style="border-color:#eab308" data-dash="pending" role="button"><h3>Applications</h3><p>${pendingAccounts} account · ${pendingEnrol} course. Review documents in Approvals.</p></div>` : ''}`;
   content().querySelectorAll('[data-dash]').forEach((el) => {
     el.addEventListener('click', () => {
       const k = el.getAttribute('data-dash');
@@ -267,15 +309,24 @@ function renderApprovals() {
   const courses = getCourses();
   const pendingAccounts = load(KEYS.applications, []).filter((a) => a.status === 'pending');
   const pendingEnrol = getEnrolments().filter((e) => e.status === 'pending');
-  let html = `<h2 class="page-title">Applications & access</h2><p class="text-secondary mb-3">Approve account applications so learners can enter the app.</p>`;
+  let html = `<h2 class="page-title">Applications & access</h2>
+    <p class="text-secondary mb-3">Review uploaded documents, then approve or decline.</p>`;
   if (pendingAccounts.length) {
     html += `<h3 class="h6 text-secondary">New account applications (${pendingAccounts.length})</h3>`;
     pendingAccounts.forEach((a) => {
       const prog = courses.find((c) => c.id === a.programmeId);
+      const d = a.documents || {};
       html += `<div class="list-card" style="border-color:#eab308">
         <h3>${escapeHtml(a.name)} <span class="badge-soft badge-warn">New applicant</span></h3>
         <p>${escapeHtml(a.email)}</p>
         <p class="text-secondary small">Programme: ${escapeHtml(prog ? (prog.programme || prog.title) : '—')}</p>
+        <div class="content-block mb-2" style="font-size:.85rem">
+          <p class="mb-1"><strong>Documents</strong></p>
+          <p class="mb-1">ID: ${fileLinkHtml(d.idCopy)}</p>
+          <p class="mb-1">Matric: ${fileLinkHtml(d.matric)}</p>
+          <p class="mb-1">Other: ${(d.otherCerts || []).length ? (d.otherCerts || []).map(fileLinkHtml).join(', ') : '—'}</p>
+          <p class="mb-0">Doctor\'s note: ${d.hasDisability ? fileLinkHtml(d.disabilityNote) : 'N/A'}</p>
+        </div>
         <textarea class="form-control form-control-sm mb-2" id="acc-notes-${a.id}" rows="2" placeholder="Notes"></textarea>
         <button class="btn btn-sm btn-primary me-2" data-acc-approve="${a.id}">Approve access</button>
         <button class="btn btn-sm btn-outline-light" data-acc-decline="${a.id}">Decline</button></div>`;
@@ -296,8 +347,7 @@ function renderApprovals() {
   content().innerHTML = html;
   content().querySelectorAll('[data-acc-approve]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const id = btn.getAttribute('data-acc-approve');
-      approveAccountApplication(id, true, document.getElementById('acc-notes-' + id)?.value || '');
+      approveAccountApplication(btn.getAttribute('data-acc-approve'), true, document.getElementById('acc-notes-' + btn.getAttribute('data-acc-approve'))?.value || '');
       renderApprovals();
     });
   });
@@ -351,15 +401,14 @@ function renderCatalog() {
   const courses = getCourses();
   const enrolments = getEnrolments();
   content().innerHTML = `<h2 class="page-title">${s.role === 'trainer' ? 'Programmes' : 'Course catalogue'}</h2>
-    <p class="text-secondary mb-3">Tap a programme, then tap a module to open content.</p>` +
+    <p class="text-secondary mb-3">Tap a programme, then open a module. Assignments support file upload.</p>` +
     courses.map((c) => {
       const enr = enrolments.find((e) => e.learnerId === s.id && e.courseId === c.id);
       const status = enr ? enr.status : null;
       return `<div class="list-card"><h3>${escapeHtml(c.title)}</h3>
         <p class="text-secondary small mb-2">${escapeHtml(c.description || '')}</p>
         <div class="meta mb-2"><span class="badge-soft">NQF ${c.nqfLevel}</span>
-          <span class="badge-soft">${c.credits} credits</span>
-          <span class="badge-soft">SAQA ${c.saqaId}</span></div>
+          <span class="badge-soft">${c.credits} credits</span></div>
         ${s.role === 'trainer' || status === 'approved'
           ? `<button class="btn btn-sm btn-primary" data-open="${c.id}">Open modules</button>`
           : status === 'pending'
@@ -376,7 +425,7 @@ function renderCatalog() {
       const list = getEnrolments().filter((e) => !(e.learnerId === s.id && e.courseId === courseId));
       list.push({ id: uid(), courseId, learnerId: s.id, status: 'pending', enrolledAt: new Date().toISOString() });
       saveEnrolments(list);
-      alert('Course application submitted for review.');
+      alert('Course application submitted.');
       renderCatalog();
     });
   });
@@ -395,7 +444,7 @@ function renderCourseDetail(courseId) {
       <div class="lesson-card" data-lesson="${l.id}" role="button">
         <div class="num">${i + 1}</div>
         <div style="flex:1"><h4>${escapeHtml(l.title)}</h4>
-          <p>${l.type} · <span style="color:#93c5fd">Open →</span></p></div>
+          <p>${l.type}${l.type === 'assignment' ? ' · upload evidence' : ''} · <span style="color:#93c5fd">Open →</span></p></div>
       </div>`).join('')}`;
   document.getElementById('btn-back-course')?.addEventListener('click', () => {
     if (s.role === 'trainer') { renderCatalog(); setNavActive('catalog'); }
@@ -420,27 +469,7 @@ function openLesson(courseId, lesson, isTrainer) {
     document.getElementById('btn-back-lesson')?.addEventListener('click', () => renderCourseDetail(courseId));
     return;
   }
-  if (lesson.type === 'assignment') {
-    content().innerHTML = `
-      <button class="btn btn-sm btn-outline-light mb-2" id="btn-back-lesson"><i class="bi bi-arrow-left"></i> Back</button>
-      <h2 class="page-title">${escapeHtml(lesson.title)}</h2>
-      <div class="content-block mb-3">${formatBody(lesson.body)}</div>
-      ${!isTrainer ? `<textarea class="form-control mb-2" id="assignment-text" rows="5" placeholder="Your answer (min 20 chars)"></textarea>
-        <button class="btn btn-primary w-100" id="btn-submit-asg">Submit for marking</button>` : ''}`;
-    document.getElementById('btn-back-lesson')?.addEventListener('click', () => renderCourseDetail(courseId));
-    document.getElementById('btn-submit-asg')?.addEventListener('click', () => {
-      const text = document.getElementById('assignment-text').value.trim();
-      if (text.length < 20) { alert('Please write at least 20 characters.'); return; }
-      const s = getSession();
-      const list = getSubmissions();
-      list.push({ id: uid(), assignmentId: lesson.assignmentId, courseId, learnerId: s.id, text,
-        status: 'submitted', submittedAt: new Date().toISOString(), score: null, feedback: '' });
-      save(KEYS.submissions, list);
-      alert('Submitted for marking.');
-      renderCourseDetail(courseId);
-    });
-    return;
-  }
+  if (lesson.type === 'assignment') return openAssignmentLesson(courseId, lesson, isTrainer);
   content().innerHTML = `
     <button class="btn btn-sm btn-outline-light mb-2" id="btn-back-lesson"><i class="bi bi-arrow-left"></i> Back</button>
     <h2 class="page-title">${escapeHtml(lesson.title)}</h2>
@@ -449,16 +478,127 @@ function openLesson(courseId, lesson, isTrainer) {
   document.getElementById('btn-back-lesson')?.addEventListener('click', () => renderCourseDetail(courseId));
 }
 
+function openAssignmentLesson(courseId, lesson, isTrainer) {
+  const s = getSession();
+  const mine = getSubmissions().filter((x) => x.learnerId === s.id && x.assignmentId === lesson.assignmentId).pop();
+  if (isTrainer) {
+    content().innerHTML = `
+      <button class="btn btn-sm btn-outline-light mb-2" id="btn-back-lesson"><i class="bi bi-arrow-left"></i> Back</button>
+      <h2 class="page-title">${escapeHtml(lesson.title)}</h2>
+      <div class="content-block">${formatBody(lesson.body)}</div>
+      <p class="text-secondary small">Learners upload knowledge + practical evidence before submit. Grade under Grade tab.</p>`;
+    document.getElementById('btn-back-lesson')?.addEventListener('click', () => renderCourseDetail(courseId));
+    return;
+  }
+  if (mine && mine.status === 'graded') {
+    content().innerHTML = `
+      <button class="btn btn-sm btn-outline-light mb-2" id="btn-back-lesson"><i class="bi bi-arrow-left"></i> Back</button>
+      <h2 class="page-title">${escapeHtml(lesson.title)}</h2>
+      <p><span class="badge-soft ${mine.passed ? 'badge-ok' : 'badge-warn'}">Score ${mine.score}% · ${mine.passed ? 'Pass' : 'Not yet'}</span></p>
+      ${mine.feedback ? `<div class="content-block mb-2"><strong>Feedback</strong><br>${formatBody(mine.feedback)}</div>` : ''}
+      <div class="content-block mb-2" style="font-size:.9rem">${formatBody(mine.text)}</div>
+      <div class="content-block mb-2" style="font-size:.85rem">
+        <p class="mb-1">Knowledge file: ${fileLinkHtml(mine.attachments?.knowledge)}</p>
+        <p class="mb-0">Practical evidence: ${fileLinkHtml(mine.attachments?.practical)}</p>
+      </div>
+      ${!mine.passed ? `<button class="btn btn-primary w-100" id="btn-resubmit">Resubmit with files</button>` : ''}`;
+    document.getElementById('btn-back-lesson')?.addEventListener('click', () => renderCourseDetail(courseId));
+    document.getElementById('btn-resubmit')?.addEventListener('click', () => showAssignmentSubmitForm(courseId, lesson, mine));
+    return;
+  }
+  if (mine && mine.status === 'submitted') {
+    content().innerHTML = `
+      <button class="btn btn-sm btn-outline-light mb-2" id="btn-back-lesson"><i class="bi bi-arrow-left"></i> Back</button>
+      <h2 class="page-title">${escapeHtml(lesson.title)}</h2>
+      <div class="content-block mb-2"><p class="mb-0">Submitted — awaiting result.</p></div>
+      <div class="content-block mb-2" style="font-size:.9rem">${formatBody(mine.text)}</div>
+      <div class="content-block" style="font-size:.85rem">
+        <p class="mb-1">Knowledge: ${fileLinkHtml(mine.attachments?.knowledge)}</p>
+        <p class="mb-0">Practical: ${fileLinkHtml(mine.attachments?.practical)}</p>
+      </div>`;
+    document.getElementById('btn-back-lesson')?.addEventListener('click', () => renderCourseDetail(courseId));
+    return;
+  }
+  showAssignmentSubmitForm(courseId, lesson, null);
+}
+
+function showAssignmentSubmitForm(courseId, lesson, previous) {
+  content().innerHTML = `
+    <button class="btn btn-sm btn-outline-light mb-2" id="btn-back-lesson"><i class="bi bi-arrow-left"></i> Back</button>
+    <h2 class="page-title">${escapeHtml(lesson.title)}</h2>
+    <div class="content-block mb-3">${formatBody(lesson.body)}</div>
+    <label class="form-label">Written answer / knowledge response</label>
+    <textarea class="form-control mb-3" id="assignment-text" rows="5" placeholder="Write your knowledge response (min 20 characters)…"></textarea>
+    <label class="form-label">Knowledge module evidence (PDF / image / doc)</label>
+    <input type="file" id="asg-knowledge" class="form-control mb-2" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,image/*,application/pdf">
+    <p class="text-secondary small mb-2">Upload worksheet, completed guide, or knowledge task file.</p>
+    <label class="form-label">Practical evidence (PDF / image / video clip)</label>
+    <input type="file" id="asg-practical" class="form-control mb-2" accept=".pdf,.jpg,.jpeg,.png,.mp4,.mov,image/*,video/*,application/pdf">
+    <p class="text-secondary small mb-3">Upload photos, checklist, or short practical proof. Max 1.5MB per file (demo limit).</p>
+    <div id="asg-error" class="alert alert-danger d-none py-2"></div>
+    <button class="btn btn-primary w-100" id="btn-submit-asg">Upload & submit for marking</button>`;
+  document.getElementById('btn-back-lesson')?.addEventListener('click', () => renderCourseDetail(courseId));
+  document.getElementById('btn-submit-asg')?.addEventListener('click', async () => {
+    const err = document.getElementById('asg-error');
+    err?.classList.add('d-none');
+    const text = document.getElementBy('assignment-text').value.trim();
+    if (text.length < 20) {
+      if (err) { err.textContent = 'Please write at least 20 characters in the knowledge response.'; err.classList.remove('d-none'); }
+      return;
+    }
+    const btn = document.getElementById('btn-submit-asg');
+    if (btn) { btn.disabled = true; btn.textContent = 'Uploading…'; }
+    try {
+      const knowledge = await readFilesFromInput(document.getElementById('asg-knowledge'), false);
+      const practical = await readFilesFromInput(document.getElementById('asg-practical'), false);
+      if (!knowledge && !practical) {
+        if (err) { err.textContent = 'Upload at least one file: knowledge evidence and/or practical evidence.'; err.classList.remove('d-none'); }
+        if (btn) { btn.disabled = false; btn.textContent = 'Upload & submit for marking'; }
+        return;
+      }
+      const s = getSession();
+      const list = getSubmissions();
+      if (previous) {
+        const sub = list.find((x) => x.id === previous.id);
+        if (sub) {
+          sub.text = text; sub.status = 'submitted'; sub.score = null; sub.feedback = '';
+          sub.passed = false; sub.attachments = { knowledge, practical };
+          sub.submittedAt = new Date().toISOString();
+        }
+      } else {
+        list.push({
+          id: uid(), assignmentId: lesson.assignmentId, courseId, learnerId: s.id, text,
+          status: 'submitted', submittedAt: new Date().toISOString(), score: null, feedback: '',
+          attachments: { knowledge, practical },
+        });
+      }
+      save(KEYS.submissions, list);
+      pushMessage(s.id, s.gmail || s.email, 'Submission received', 'Your assignment with uploads was submitted for marking.');
+      alert('Submitted with uploads.');
+      openAssignmentLesson(courseId, lesson, false);
+    } catch (e) {
+      if (err) { err.textContent = 'Upload failed. Try smaller files (max 1.5MB each).'; err.classList.remove('d-none'); }
+      if (btn) { btn.disabled = false; btn.textContent = 'Upload & submit for marking'; }
+    }
+  });
+}
+
 function renderGrading() {
   const subs = getSubmissions().filter((s) => s.status === 'submitted');
   const users = load(KEYS.users, []);
-  content().innerHTML = `<h2 class="page-title">To grade</h2>` +
+  content().innerHTML = `<h2 class="page-title">To grade</h2>
+    <p class="text-secondary mb-3">Open attachments, then enter a score.</p>` +
     (subs.length === 0 ? '<div class="empty">Nothing to grade</div>' :
       subs.map((sub) => {
         const learner = users.find((u) => u.id === sub.learnerId);
         return `<div class="list-card"><h3>${escapeHtml(learner?.name || 'Learner')}</h3>
           <div class="content-block mb-2" style="font-size:.9rem">${formatBody(sub.text)}</div>
+          <div class="content-block mb-2" style="font-size:.85rem">
+            <p class="mb-1">Knowledge: ${fileLinkHtml(sub.attachments?.knowledge)}</p>
+            <p class="mb-0">Practical: ${fileLinkHtml(sub.attachments?.practical)}</p>
+          </div>
           <input type="number" class="form-control mb-2" id="score-${sub.id}" min="0" max="100" value="70">
+          <textarea class="form-control mb-2" id="fb-${sub.id}" rows="2" placeholder="Feedback"></textarea>
           <button class="btn btn-sm btn-primary" data-grade="${sub.id}">Save grade</button></div>`;
       }).join(''));
   content().querySelectorAll('[data-grade]').forEach((btn) => {
@@ -469,7 +609,9 @@ function renderGrading() {
       if (!sub) return;
       sub.status = 'graded';
       sub.score = Number(document.getElementById('score-' + id)?.value) || 0;
+      sub.feedback = document.getElementById('fb-' + id)?.value || '';
       sub.passed = sub.score >= 70;
+      sub.gradedAt = new Date().toISOString();
       save(KEYS.submissions, list);
       alert('Grade saved.');
       renderGrading();
@@ -489,13 +631,12 @@ function renderMessages() {
 function renderAbout() {
   content().innerHTML = `<h2 class="page-title">About EduFlow</h2>
     <div class="content-block">
-      <p class="mb-2"><strong>Learner path</strong></p>
-      <ol class="text-secondary small mb-0">
-        <li>Create account (Gmail + password)</li>
-        <li>Submit application (programme + documents)</li>
-        <li>Administrator approves</li>
-        <li>Full access to modules, assessments and results</li>
-      </ol>
+      <p class="mb-2"><strong>Uploads</strong></p>
+      <ul class="text-secondary small mb-0">
+        <li>Application: ID, Matric, other certificates, doctor\'s note</li>
+        <li>Assignments: knowledge module evidence + practical evidence</li>
+        <li>Demo limit: 1.5MB per file (stored in browser)</li>
+      </ul>
     </div>`;
 }
 
@@ -537,33 +678,36 @@ async function bootEduFlow() {
     showApplicationStep(result.user);
   });
 
-  document.getElementById('apply-form')?.addEventListener('submit', (e) => {
+  document.getElementById('apply-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const err = document.getElementById('apply-error');
     err?.classList.add('d-none');
     const s = getSession();
     if (!s) { alert('Please create an account first.'); showRegisterPanel(); return; }
-    const hasDisability = !!document.getElementById('apply-disability')?.checked;
-    const fileMeta = (inputId) => {
-      const f = document.getElementById(inputId)?.files?.[0];
-      return f ? { name: f.name, size: f.size, type: f.type } : null;
-    };
-    const result = submitApplicationForUser(s.id, {
-      programmeId: document.getElementById('apply-programme')?.value || '',
-      notes: document.getElementById('apply-notes')?.value.trim() || '',
-      documents: {
-        hasDisability,
-        idCopy: fileMeta('apply-id'),
-        matric: fileMeta('apply-matric'),
-        disabilityNote: hasDisability ? fileMeta('apply-note') : null,
-      },
-    });
-    if (!result.ok) {
-      if (err) { err.textContent = result.message; err.classList.remove('d-none'); }
-      else alert(result.message);
-      return;
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Uploading documents…'; }
+    try {
+      const hasDisability = !!document.getElementById('apply-disability')?.checked;
+      const idCopy = await readFilesFromInput(document.getElementById('apply-id'), false);
+      const matric = await readFilesFromInput(document.getElementById('apply-matric'), false);
+      const otherCerts = await readFilesFromInput(document.getElementById('apply-other'), true);
+      const disabilityNote = hasDisability ? await readFilesFromInput(document.getElementById('apply-note'), false) : null;
+      const result = submitApplicationForUser(s.id, {
+        programmeId: document.getElementById('apply-programme')?.value || '',
+        notes: document.getElementById('apply-notes')?.value.trim() || '',
+        documents: { hasDisability, idCopy, matric, otherCerts, disabilityNote },
+      });
+      if (!result.ok) {
+        if (err) { err.textContent = result.message; err.classList.remove('d-none'); }
+        else alert(result.message);
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit application'; }
+        return;
+      }
+      showAwaitingApproval();
+    } catch (ex) {
+      if (err) { err.textContent = 'Document upload failed. Use smaller files (max 1.5MB each).'; err.classList.remove('d-none'); }
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit application'; }
     }
-    showAwaitingApproval();
   });
 
   document.getElementById('btn-logout')?.addEventListener('click', logout);
