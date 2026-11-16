@@ -18,12 +18,14 @@ Object.assign(globalThis, {
   getLiveMode,
 });
 
-const [p1, p2] = await Promise.all([
-  import('./app-part1.js'),
-  import('./app-part2.js'),
+const parts = await Promise.all([
+  import('./app-p0.js'),
+  import('./app-p1.js'),
+  import('./app-p2.js'),
+  import('./app-p3.js'),
 ]);
 const preamble = `const { KEYS, load, save, uid, seedIfNeeded, onLiveChange, getLiveMode } = globalThis;\n`;
-const source = preamble + p1.default + p2.default;
+const source = preamble + parts.map((m) => m.default).join('');
 try {
   // eslint-disable-next-line no-new-func
   new Function(source)();
