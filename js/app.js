@@ -5,8 +5,11 @@ import {
 Object.assign(globalThis, { KEYS, load, save, uid, seedIfNeeded, onLiveChange, getLiveMode });
 
 const base = new URL('./', import.meta.url);
-const [a, b] = await Promise.all([
-  fetch(new URL('part1.txt?v=20261116f', base)).then(r => { if (!r.ok) throw new Error('part1'); return r.text(); }),
-  fetch(new URL('part2.txt?v=20261116f', base)).then(r => { if (!r.ok) throw new Error('part2'); return r.text(); }),
-]);
-new Function(a + b)();
+const names = ['p1a.txt', 'p1b.txt', 'part2.txt'];
+const parts = await Promise.all(
+  names.map((n) => fetch(new URL(n + '?v=20261116f', base)).then((r) => {
+    if (!r.ok) throw new Error('Failed ' + n);
+    return r.text();
+  }))
+);
+new Function(parts.join(''))();
