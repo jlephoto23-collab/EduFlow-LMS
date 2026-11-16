@@ -18,17 +18,13 @@ Object.assign(globalThis, {
   getLiveMode,
 });
 
-const parts = await Promise.all([
-  import('./app-p0.js'),
-  import('./app-p1.js'),
-  import('./app-p2.js'),
-  import('./app-p3.js'),
-]);
+const mods = await Promise.all(
+  Array.from({ length: 8 }, (_, i) => import('./ap' + i + '.js'))
+);
 const preamble = `const { KEYS, load, save, uid, seedIfNeeded, onLiveChange, getLiveMode } = globalThis;\n`;
-const source = preamble + parts.map((m) => m.default).join('');
 try {
   // eslint-disable-next-line no-new-func
-  new Function(source)();
+  new Function(preamble + mods.map((m) => m.default).join(''))();
 } catch (err) {
   console.error('EduFlow failed to start', err);
   document.getElementById('splash')?.classList.add('hide');
