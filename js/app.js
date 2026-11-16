@@ -10,6 +10,10 @@ function escapeHtml(s) {
     .replace(/"/g, '"');
 }
 
+function formatBody(text) {
+  return escapeHtml(text || '').replace(/\n/g, '<br>');
+}
+
 function getSession() { return load(KEYS.session, null); }
 function setSession(user) {
   if (!user) { localStorage.removeItem(KEYS.session); return; }
@@ -98,8 +102,30 @@ function getCourse(id) { return getCourses().find((c) => c.id === id); }
 function getEnrolments() { return load(KEYS.enrolments, []); }
 function saveEnrolments(list) { save(KEYS.enrolments, list); }
 function getSubmissions() { return load(KEYS.submissions, []); }
+function getAssignments() { return load(KEYS.assignments, []); }
 function content() { return document.getElementById('content'); }
 function bottomNav() { return document.getElementById('bottom-nav'); }
+
+function getProgress(learnerId, courseId) {
+  const all = load(KEYS.progress, []);
+  let row = all.find((p) => p.learnerId === learnerId && p.courseId === courseId);
+  if (!row) row = { learnerId, courseId, completedLessonIds: [], percent: 0 };
+  return row;
+}
+function saveProgress(row) {
+  const all = load(KEYS.progress, []);
+  const i = all.findIndex((p) => p.learnerId === row.learnerId && p.courseId === row.courseId);
+  if (i >= 0) all[i] = row; else all.push(row);
+  save(KEYS.progress, all);
+}
+function markLessonComplete(learnerId, courseId, lessonId) {
+  const course = getCourse(courseId);
+  if (!course) return;
+  const row = getProgress(learnerId, courseId);
+  if (!row.completedLessonIds.includes(lessonId)) row.completedLessonIds.push(lessonId);
+  row.percent = course.lessons.length ? Math.round((row.completedLessonIds.length / course.lessons.length) * 100) : 0;
+  saveProgress(row);
+}
 
 function showLogin() {
   document.getElementById('login-view').classList.remove('d-none');
@@ -235,7 +261,10 @@ function renderTrainerHome() {
       <div class="stat-card stat-link" data-dash="grade" role="button"><div class="label">To grade</div><div class="value">${toGrade}</div><div class="stat-hint">Open grading</div></div>
     </div>
     ${pending ? `<div class="list-card list-link" style="border-color:#eab308" data-dash="pending" role="button"><h3>Applications</h3><p>${pendingAccounts} new account(s) · ${pendingEnrol} course request(s). Tap to open Approvals.</p></div>` : ''}
-    <p class="text-secondary small mt-3 mb-0">Demo: approve Thabo under Approvals, then sign in as thabo.apply@gmail.com / pending123.</p>`;
+    <div class="content-block mt-3">
+      <p class="mb-1"><strong>Where do learners apply?</strong></p>
+      <p class="text-secondary small mb-0">Log out → on the sign-in screen tap <strong>New learner? Apply for access</strong>. That is the public application form (documents + programme choice). Admin approves under <strong>Approvals</strong>.</p>
+    </div>`;
 
   content().querySelectorAll('[data-dash]').forEach((el) => {
     el.addEventListener('click', () => {
@@ -273,10 +302,8 @@ function renderApprovals() {
   const courses = getCourses();
   const pendingEnrol = getEnrolments().filter((e) => e.status === 'pending');
   const pendingAccounts = load(KEYS.applications, []).filter((a) => a.status === 'pending');
-
   let html = `<h2 class="page-title">Applications & access</h2>
     <p class="text-secondary mb-3">First approve new applicants so they can enter the app. Then approve course access.</p>`;
-
   if (pendingAccounts.length) {
     html += `<h3 class="h6 text-secondary">New account applications (${pendingAccounts.length})</h3>`;
     pendingAccounts.forEach((a) => {
@@ -293,7 +320,6 @@ function renderApprovals() {
         </div></div>`;
     });
   }
-
   if (pendingEnrol.length) {
     html += `<h3 class="h6 text-secondary mt-3">Course access requests (${pendingEnrol.length})</h3>`;
     pendingEnrol.forEach((e) => {
@@ -309,15 +335,11 @@ function renderApprovals() {
         </div></div>`;
     });
   }
-
   if (!pendingAccounts.length && !pendingEnrol.length) html += '<div class="empty">No pending applications</div>';
   content().innerHTML = html;
-
   content().querySelectorAll('[data-acc-approve]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const id = btn.getAttribute('data-acc-approve');
-      const notes = (document.getElementById('acc-notes-' + id)?.value || '').trim();
-      approveAccountApplication(id, true, notes);
+      approveAccountApplication(btn.getAttribute('data-acc-approve'), true, (document.getElementById('acc-notes-' + btn.getAttribute('data-acc-approve'))?.value || '').trim());
       renderApprovals();
     });
   });
@@ -375,7 +397,7 @@ function renderLearnerHome() {
       ? '<div class="empty">No approved programmes yet. Open Courses to apply.</div>'
       : enrolments.map((e) => {
           const c = courses.find((x) => x.id === e.courseId);
-          return `<div class="list-card list-link" data-course="${e.courseId}"><h3>${escapeHtml(c?.title || e.courseId)}</h3>
+          return `<div class="list-card list-link" data-course="${e.courseId}" role="button"><h3>${escapeHtml(c?.title || e.courseId)}</h3>
             <p class="text-secondary small">NQF ${c?.nqfLevel || '?'} · ${c?.credits || '?'} credits · SAQA ${c?.saqaId || ''}</p>
             <span class="badge-soft badge-ok">Approved access</span></div>`;
         }).join('')}
@@ -391,7 +413,7 @@ function renderCatalog() {
   const courses = getCourses();
   const enrolments = getEnrolments();
   content().innerHTML = `<h2 class="page-title">${s.role === 'trainer' ? 'Programmes' : 'Course catalogue'}</h2>
-    <p class="text-secondary mb-3">NQF pilot programmes with SAQA register references.</p>` +
+    <p class="text-secondary mb-3">Tap a programme, then tap any module to open the learner guide, content, quiz or assignment.</p>` +
     courses.map((c) => {
       const enr = enrolments.find((e) => e.learnerId === s.id && e.courseId === c.id);
       const status = enr ? enr.status : null;
@@ -404,15 +426,14 @@ function renderCatalog() {
           <span class="badge-soft">SAQA ${c.saqaId}</span>
         </div>
         ${s.role === 'trainer'
-          ? `<button class="btn btn-sm btn-outline-light" data-open="${c.id}">Open modules</button>`
+          ? `<button class="btn btn-sm btn-primary" data-open="${c.id}">Open modules</button>`
           : status === 'approved'
-            ? `<button class="btn btn-sm btn-primary" data-open="${c.id}">Continue</button>`
+            ? `<button class="btn btn-sm btn-primary" data-open="${c.id}">Continue learning</button>`
             : status === 'pending'
               ? `<span class="badge-soft badge-warn">Application pending</span>`
               : `<button class="btn btn-sm btn-primary" data-apply="${c.id}">Apply for this programme</button>`}
       </div>`;
     }).join('');
-
   content().querySelectorAll('[data-open]').forEach((btn) => {
     btn.addEventListener('click', () => renderCourseDetail(btn.getAttribute('data-open')));
   });
@@ -423,7 +444,7 @@ function renderCatalog() {
       list.push({
         id: uid(), courseId, learnerId: s.id, status: 'pending', enrolledAt: new Date().toISOString(),
         documents: { hasDisability: false, idCopy: null, matric: null, otherCerts: [], disabilityNote: null },
-        meetsMinimum: false, requirementIssues: ['Documents can be added later'], reviewNotes: '',
+        meetsMinimum: false, requirementIssues: [], reviewNotes: '',
       });
       saveEnrolments(list);
       pushMessage(s.id, s.gmail || s.email, 'Course application submitted', 'Your request is pending administrator approval.');
@@ -437,17 +458,181 @@ function renderCourseDetail(courseId) {
   const c = getCourse(courseId);
   if (!c) return;
   const s = getSession();
-  content().innerHTML = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-course"><i class="bi bi-arrow-left"></i> Back</button>
+  const isTrainer = s.role === 'trainer';
+  const prog = getProgress(s.id, courseId);
+  content().innerHTML = `
+    <button class="btn btn-sm btn-outline-light mb-2" id="btn-back-course"><i class="bi bi-arrow-left"></i> Back</button>
     <h2 class="page-title">${escapeHtml(c.title)}</h2>
     <p class="text-secondary small">NQF ${c.nqfLevel} · ${c.credits} credits · SAQA ${c.saqaId}</p>
-    <p class="mb-3">${escapeHtml(c.description || '')}</p>
+    <p class="mb-2">${escapeHtml(c.description || '')}</p>
     <h3 class="h6 text-secondary">Unit standards (register references)</h3>
-    <ul class="text-secondary small">${(c.unitStandards || []).map((u) => `<li>${u.id}: ${escapeHtml(u.title)} (NQF ${u.nqfLevel}, ${u.credits} cr)</li>`).join('')}</ul>
-    <h3 class="h6 text-secondary mt-3">Modules</h3>
-    ${(c.lessons || []).map((l, i) => `<div class="lesson-card"><div class="num">${i + 1}</div><div><h4>${escapeHtml(l.title)}</h4><p>${l.type}</p></div></div>`).join('')}`;
+    <ul class="text-secondary small mb-3">${(c.unitStandards || []).map((u) => `<li>${u.id}: ${escapeHtml(u.title)} (NQF ${u.nqfLevel}, ${u.credits} cr)</li>`).join('')}</ul>
+    <h3 class="h6 text-secondary">Modules — tap to open</h3>
+    ${(c.lessons || []).map((l, i) => {
+      const done = prog.completedLessonIds.includes(l.id);
+      return `<div class="lesson-card ${done ? 'done' : ''}" data-lesson="${l.id}" role="button" tabindex="0">
+        <div class="num">${i + 1}</div>
+        <div style="flex:1">
+          <h4>${escapeHtml(l.title)}</h4>
+          <p>${l.type}${done ? ' · completed' : ''} · <span style="color:#93c5fd">Open →</span></p>
+        </div>
+      </div>`;
+    }).join('')}`;
   document.getElementById('btn-back-course')?.addEventListener('click', () => {
-    if (s.role === 'trainer') { renderCatalog(); setNavActive('catalog'); }
+    if (isTrainer) { renderCatalog(); setNavActive('catalog'); }
     else { renderLearnerHome(); setNavActive('home'); }
+  });
+  content().querySelectorAll('[data-lesson]').forEach((el) => {
+    el.addEventListener('click', () => {
+      const lessonId = el.getAttribute('data-lesson');
+      const lesson = (c.lessons || []).find((x) => x.id === lessonId);
+      if (lesson) openLesson(courseId, lesson, isTrainer);
+    });
+  });
+}
+
+function openLesson(courseId, lesson, isTrainer) {
+  if (lesson.type === 'quiz') return renderQuiz(courseId, lesson, isTrainer);
+  if (lesson.type === 'assignment') return renderAssignment(courseId, lesson, isTrainer);
+  content().innerHTML = `
+    <button class="btn btn-sm btn-outline-light mb-2" id="btn-back-lesson"><i class="bi bi-arrow-left"></i> Back to modules</button>
+    <h2 class="page-title">${escapeHtml(lesson.title)}</h2>
+    <p class="text-secondary small mb-3">${lesson.type}</p>
+    <div class="content-block mb-3">${formatBody(lesson.body)}</div>
+    ${!isTrainer ? `<button class="btn btn-primary w-100" id="btn-mark-done">Mark as complete</button>` : ''}`;
+  document.getElementById('btn-back-lesson')?.addEventListener('click', () => renderCourseDetail(courseId));
+  document.getElementById('btn-mark-done')?.addEventListener('click', () => {
+    const s = getSession();
+    markLessonComplete(s.id, courseId, lesson.id);
+    alert('Marked complete.');
+    renderCourseDetail(courseId);
+  });
+}
+
+function renderQuiz(courseId, lesson, isTrainer) {
+  const quiz = lesson.quiz || { passMark: 70, questions: [] };
+  if (isTrainer) {
+    content().innerHTML = `
+      <button class="btn btn-sm btn-outline-light mb-2" id="btn-back-lesson"><i class="bi bi-arrow-left"></i> Back</button>
+      <h2 class="page-title">${escapeHtml(lesson.title)}</h2>
+      <p class="text-secondary">${quiz.questions.length} questions · pass mark ${quiz.passMark}%</p>
+      <ol class="content-block">${quiz.questions.map((q) => `<li class="mb-2">${escapeHtml(q.q)}<ul class="small text-secondary">${(q.options || []).map((o, i) => `<li${i === q.correctIndex ? ' style="color:#86efac"' : ''}>${escapeHtml(o)}${i === q.correctIndex ? ' ✓' : ''}</li>`).join('')}</ul></li>`).join('')}</ol>`;
+    document.getElementById('btn-back-lesson')?.addEventListener('click', () => renderCourseDetail(courseId));
+    return;
+  }
+  let index = 0;
+  const answers = [];
+  const questions = quiz.questions;
+  function paint() {
+    const q = questions[index];
+    content().innerHTML = `
+      <button class="btn btn-sm btn-outline-light mb-2" id="btn-back-lesson"><i class="bi bi-arrow-left"></i> Back</button>
+      <h2 class="page-title">${escapeHtml(lesson.title)}</h2>
+      <p class="text-secondary small">Question ${index + 1} of ${questions.length}</p>
+      <div class="content-block mb-3"><p class="mb-0">${escapeHtml(q.q)}</p></div>
+      ${(q.options || []).map((o, i) => `<button type="button" class="quiz-option" data-opt="${i}">${escapeHtml(o)}</button>`).join('')}`;
+    document.getElementById('btn-back-lesson')?.addEventListener('click', () => renderCourseDetail(courseId));
+    content().querySelectorAll('[data-opt]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        answers[index] = Number(btn.getAttribute('data-opt'));
+        if (index < questions.length - 1) { index += 1; paint(); }
+        else {
+          let correct = 0;
+          questions.forEach((qq, i) => { if (answers[i] === qq.correctIndex) correct += 1; });
+          const score = Math.round((correct / questions.length) * 100);
+          const passed = score >= (quiz.passMark || 70);
+          const s = getSession();
+          const attempts = load(KEYS.attempts, []);
+          attempts.push({ id: uid(), learnerId: s.id, courseId, lessonId: lesson.id, score, passed, at: new Date().toISOString() });
+          save(KEYS.attempts, attempts);
+          if (passed) markLessonComplete(s.id, courseId, lesson.id);
+          content().innerHTML = `
+            <button class="btn btn-sm btn-outline-light mb-2" id="btn-back-lesson"><i class="bi bi-arrow-left"></i> Back</button>
+            <h2 class="page-title">Quiz result</h2>
+            <div class="content-block text-center">
+              <p class="display-6 mb-1">${score}%</p>
+              <p class="mb-0"><span class="badge-soft ${passed ? 'badge-ok' : 'badge-warn'}">${passed ? 'Pass' : 'Not yet'}</span></p>
+              <p class="text-secondary small mt-2">Pass mark ${quiz.passMark}%. ${correct} of ${questions.length} correct.</p>
+            </div>`;
+          document.getElementById('btn-back-lesson')?.addEventListener('click', () => renderCourseDetail(courseId));
+        }
+      });
+    });
+  }
+  paint();
+}
+
+function renderAssignment(courseId, lesson, isTrainer) {
+  const s = getSession();
+  const asg = getAssignments().find((a) => a.id === lesson.assignmentId) || {
+    id: lesson.assignmentId, instructions: lesson.body, maxScore: 100,
+  };
+  const mine = getSubmissions().filter((x) => x.learnerId === s.id && x.assignmentId === asg.id).pop();
+  if (isTrainer) {
+    content().innerHTML = `
+      <button class="btn btn-sm btn-outline-light mb-2" id="btn-back-lesson"><i class="bi bi-arrow-left"></i> Back</button>
+      <h2 class="page-title">${escapeHtml(lesson.title)}</h2>
+      <div class="content-block">${formatBody(asg.instructions || lesson.body)}</div>
+      <p class="text-secondary small">Learners submit from their course view. Grade under the Grade tab.</p>`;
+    document.getElementById('btn-back-lesson')?.addEventListener('click', () => renderCourseDetail(courseId));
+    return;
+  }
+  if (mine && mine.status === 'graded') {
+    content().innerHTML = `
+      <button class="btn btn-sm btn-outline-light mb-2" id="btn-back-lesson"><i class="bi bi-arrow-left"></i> Back</button>
+      <h2 class="page-title">${escapeHtml(lesson.title)}</h2>
+      <p><span class="badge-soft ${mine.passed ? 'badge-ok' : 'badge-warn'}">Score ${mine.score}% · ${mine.passed ? 'Pass' : 'Not yet'}</span></p>
+      ${mine.feedback ? `<div class="content-block mb-2"><strong>Feedback</strong><br>${formatBody(mine.feedback)}</div>` : ''}
+      <div class="content-block mb-2" style="font-size:.9rem">${formatBody(mine.text)}</div>
+      ${!mine.passed ? `<button class="btn btn-primary w-100" id="btn-resubmit">Resubmit</button>` : ''}`;
+    document.getElementById('btn-back-lesson')?.addEventListener('click', () => renderCourseDetail(courseId));
+    document.getElementById('btn-resubmit')?.addEventListener('click', () => showAssignmentForm(courseId, lesson, asg, mine));
+    return;
+  }
+  if (mine && mine.status === 'submitted') {
+    content().innerHTML = `
+      <button class="btn btn-sm btn-outline-light mb-2" id="btn-back-lesson"><i class="bi bi-arrow-left"></i> Back</button>
+      <h2 class="page-title">${escapeHtml(lesson.title)}</h2>
+      <div class="content-block mb-2"><p class="mb-0">Submitted — awaiting result.</p></div>
+      <div class="content-block" style="font-size:.9rem">${formatBody(mine.text)}</div>`;
+    document.getElementById('btn-back-lesson')?.addEventListener('click', () => renderCourseDetail(courseId));
+    return;
+  }
+  showAssignmentForm(courseId, lesson, asg, null);
+}
+
+function showAssignmentForm(courseId, lesson, asg, previous) {
+  content().innerHTML = `
+    <button class="btn btn-sm btn-outline-light mb-2" id="btn-back-lesson"><i class="bi bi-arrow-left"></i> Back</button>
+    <h2 class="page-title">${escapeHtml(lesson.title)}</h2>
+    <div class="content-block mb-3">${formatBody(asg.instructions || lesson.body)}</div>
+    <label class="form-label">Your answer</label>
+    <textarea class="form-control mb-2" id="assignment-text" rows="6" placeholder="Write your response (min 20 characters)…"></textarea>
+    <button class="btn btn-primary w-100" id="btn-submit-assignment">Submit for marking</button>`;
+  document.getElementById('btn-back-lesson')?.addEventListener('click', () => renderCourseDetail(courseId));
+  document.getElementById('btn-submit-assignment')?.addEventListener('click', () => {
+    const text = document.getElementById('assignment-text').value.trim();
+    if (text.length < 20) { alert('Please write at least 20 characters.'); return; }
+    const s = getSession();
+    const list = getSubmissions();
+    if (previous) {
+      const sub = list.find((x) => x.id === previous.id);
+      if (sub) {
+        sub.history = sub.history || [];
+        sub.history.push({ text: sub.text, score: sub.score, feedback: sub.feedback, gradedAt: sub.gradedAt });
+        sub.text = text; sub.status = 'submitted'; sub.score = null; sub.feedback = ''; sub.passed = false;
+        sub.submittedAt = new Date().toISOString();
+      }
+    } else {
+      list.push({
+        id: uid(), assignmentId: asg.id, courseId, learnerId: s.id, text,
+        status: 'submitted', submittedAt: new Date().toISOString(), score: null, feedback: '', history: [],
+      });
+    }
+    save(KEYS.submissions, list);
+    pushMessage(s.id, s.gmail || s.email, 'Submission received', 'Your assignment was submitted.');
+    alert('Submitted for marking.');
+    renderAssignment(courseId, lesson, false);
   });
 }
 
@@ -464,7 +649,7 @@ function renderGrading() {
         return `<div class="list-card">
           <h3>${escapeHtml(learner?.name || 'Learner')}</h3>
           <p class="text-secondary small">${escapeHtml(course?.title || sub.courseId)}</p>
-          <div class="content-block mb-2" style="font-size:.9rem">${escapeHtml(sub.text)}</div>
+          <div class="content-block mb-2" style="font-size:.9rem">${formatBody(sub.text)}</div>
           <label class="form-label">Score %</label>
           <input type="number" class="form-control mb-2" id="score-${sub.id}" min="0" max="100" value="70">
           <label class="form-label">Feedback</label>
@@ -480,14 +665,15 @@ function renderGrading() {
       const list = getSubmissions();
       const sub = list.find((s) => s.id === id);
       if (!sub) return;
-      sub.status = 'graded';
-      sub.score = score;
-      sub.feedback = feedback;
-      sub.gradedAt = new Date().toISOString();
-      sub.passed = score >= 70;
+      sub.status = 'graded'; sub.score = score; sub.feedback = feedback;
+      sub.gradedAt = new Date().toISOString(); sub.passed = score >= 70;
       save(KEYS.submissions, list);
+      if (sub.passed) {
+        const asg = getAssignments().find((a) => a.id === sub.assignmentId);
+        if (asg) markLessonComplete(sub.learnerId, sub.courseId, asg.lessonId);
+      }
       const learner = users.find((u) => u.id === sub.learnerId);
-      if (learner) pushMessage(learner.id, learner.gmail || learner.email, 'Assignment graded: ' + score + '%', feedback || (sub.passed ? 'Pass' : 'Not yet — you may resubmit'));
+      if (learner) pushMessage(learner.id, learner.gmail || learner.email, 'Assignment graded: ' + score + '%', feedback || (sub.passed ? 'Pass' : 'Not yet'));
       alert('Grade saved.');
       renderGrading();
     });
@@ -511,15 +697,14 @@ function renderAbout() {
     <div class="content-block">
       <p><strong>${escapeHtml(settings.providerName || 'EduFlow Training Provider')}</strong></p>
       <p class="text-secondary small">Contact: ${escapeHtml(settings.contactEmail || '')}</p>
-      <p class="mb-0">Learners apply first. Administrators approve access. Then learners enrol in NQF programmes, complete modules, submit assessments and receive results — with notices linked to Gmail.</p>
-    </div>
-    <p class="text-secondary small mt-3">Live demo: <a href="https://jlephoto23-collab.github.io/EduFlow-LMS/" style="color:#93c5fd">jlephoto23-collab.github.io/EduFlow-LMS</a></p>`;
+      <p class="mb-2">Learners apply first. Administrators approve access. Then learners enrol in NQF programmes, complete modules, submit assessments and receive results.</p>
+      <p class="mb-0"><strong>Apply here:</strong> Log out → on the sign-in screen choose <em>New learner? Apply for access</em>.</p>
+    </div>`;
 }
 
 async function bootEduFlow() {
   await seedIfNeeded();
   setTimeout(() => document.getElementById('splash')?.classList.add('hide'), 400);
-
   onLiveChange(() => {
     const s = getSession();
     if (s && s.role === 'learner') {
@@ -527,32 +712,18 @@ async function bootEduFlow() {
       if (u && u.status === 'approved' && document.getElementById('btn-pending-refresh')) showApp();
     }
   });
-
   document.getElementById('login-form')?.addEventListener('submit', (e) => {
     e.preventDefault();
     const email = document.getElementById('email').value.trim();
     const password = document.getElementById('password').value;
     const err = document.getElementById('login-error');
     const result = login(email, password);
-    if (!result.ok) {
-      err.textContent = result.message;
-      err.classList.remove('d-none');
-      return;
-    }
+    if (!result.ok) { err.textContent = result.message; err.classList.remove('d-none'); return; }
     err.classList.add('d-none');
-    if (result.pending) showAwaitingApproval();
-    else showApp();
+    if (result.pending) showAwaitingApproval(); else showApp();
   });
-
-  document.getElementById('btn-register')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    showPublicApplication();
-  });
-  document.getElementById('btn-show-login')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    showLogin();
-  });
-
+  document.getElementById('btn-register')?.addEventListener('click', (e) => { e.preventDefault(); showPublicApplication(); });
+  document.getElementById('btn-show-login')?.addEventListener('click', (e) => { e.preventDefault(); showLogin(); });
   document.getElementById('apply-form')?.addEventListener('submit', (e) => {
     e.preventDefault();
     const err = document.getElementById('apply-error');
@@ -572,11 +743,8 @@ async function bootEduFlow() {
     }
     showAwaitingApproval();
   });
-
   document.getElementById('btn-logout')?.addEventListener('click', logout);
-
-  if (getSession()) showApp();
-  else showLogin();
+  if (getSession()) showApp(); else showLogin();
 }
 
 if (document.readyState === 'loading') {
