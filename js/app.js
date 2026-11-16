@@ -2,15 +2,585 @@ import {
   KEYS, load, save, uid, seedIfNeeded, onLiveChange, getLiveMode,
 } from './store.js';
 
-Object.assign(globalThis, { KEYS, load, save, uid, seedIfNeeded, onLiveChange, getLiveMode });
+function escapeHtml(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&')
+    .replace(/</g, '<')
+    .replace(/>/g, '>')
+    .replace(/"/g, '"');
+}
 
-try {
-  const base = new URL('./', import.meta.url);
-  const parts = await Promise.all(
-    [0, 1, 2].map((i) => fetch(new URL('app-core-' + i + '.txt', base)).then((r) => r.text()))
-  );
-  new Function(parts.join(''))();
-} catch (err) {
-  console.error('EduFlow failed to start', err);
-  document.getElementById('splash')?.classList.add('hide');
+function getSession() { return load(KEYS.session, null); }
+function setSession(user) {
+  if (!user) { localStorage.removeItem(KEYS.session); return; }
+  save(KEYS.session, { id: user.id, name: user.name, email: user.email, role: user.role, gmail: user.gmail || user.email }, { silent: true });
+}
+
+function login(email, password) {
+  const users = load(KEYS.users, []);
+  const user = users.find((u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
+  if (!user) return { ok: false, message: 'Invalid email or password' };
+  if (user.role === 'learner' && (user.status || 'approved') === 'pending') {
+    setSession(user);
+    return { ok: true, user, pending: true };
+  }
+  if (user.role === 'learner' && user.status === 'rejected') {
+    return { ok: false, message: 'Your application was not approved. Contact the training provider.' };
+  }
+  setSession(user);
+  return { ok: true, user };
+}
+
+function pushMessage(toUserId, toEmail, subject, body) {
+  const messages = load(KEYS.messages, []);
+  messages.unshift({ id: uid(), toUserId, toEmail, subject, body, at: new Date().toISOString(), read: false });
+  save(KEYS.messages, messages);
+}
+
+function submitAccountApplication(payload) {
+  const users = load(KEYS.users, []);
+  const em = (payload.email || '').trim().toLowerCase();
+  const name = (payload.name || '').trim();
+  const password = payload.password || '';
+  const phone = (payload.phone || '').trim();
+  const programmeId = payload.programmeId || '';
+  const notes = (payload.notes || '').trim();
+  if (!name) return { ok: false, message: 'Full name is required' };
+  if (!em.includes('@')) return { ok: false, message: 'Enter a valid email (Gmail preferred)' };
+  if (password.length < 6) return { ok: false, message: 'Password must be at least 6 characters' };
+  if (users.some((u) => u.email.toLowerCase() === em)) {
+    return { ok: false, message: 'Email already registered — sign in or wait for approval' };
+  }
+  const user = {
+    id: uid(), name, email: em, password, role: 'learner', gmail: em, phone,
+    status: 'pending', preferredProgrammeId: programmeId || null, appliedAt: new Date().toISOString(),
+  };
+  users.push(user);
+  save(KEYS.users, users);
+  const applications = load(KEYS.applications, []);
+  applications.unshift({
+    id: uid(), userId: user.id, name, email: em, phone, programmeId: programmeId || null, notes,
+    documents: payload.documents || null, status: 'pending', submittedAt: new Date().toISOString(), reviewNotes: '',
+  });
+  save(KEYS.applications, applications);
+  pushMessage(user.id, em, 'Application received — awaiting approval',
+    'Thank you for applying to EduFlow. An administrator must approve you before full access. We will contact ' + em + '.');
+  setSession(user);
+  return { ok: true, user, pending: true };
+}
+
+function approveAccountApplication(appId, approve, reviewNotes) {
+  const applications = load(KEYS.applications, []);
+  const app = applications.find((a) => a.id === appId);
+  if (!app) return false;
+  app.status = approve ? 'approved' : 'rejected';
+  app.reviewNotes = reviewNotes || '';
+  app.reviewedAt = new Date().toISOString();
+  save(KEYS.applications, applications);
+  const users = load(KEYS.users, []);
+  const user = users.find((u) => u.id === app.userId);
+  if (user) {
+    user.status = approve ? 'approved' : 'rejected';
+    save(KEYS.users, users);
+    pushMessage(user.id, user.gmail || user.email,
+      approve ? 'Application approved — you may access EduFlow' : 'Application not approved',
+      approve
+        ? 'Your account has been approved. Sign in to choose a programme and start learning.'
+        : 'Your application was not approved. ' + (reviewNotes || 'Please contact the training provider.'));
+  }
+  return true;
+}
+
+function logout() { setSession(null); showLogin(); }
+
+function getCourses() { return load(KEYS.courses, []); }
+function getCourse(id) { return getCourses().find((c) => c.id === id); }
+function getEnrolments() { return load(KEYS.enrolments, []); }
+function saveEnrolments(list) { save(KEYS.enrolments, list); }
+function getSubmissions() { return load(KEYS.submissions, []); }
+function content() { return document.getElementById('content'); }
+function bottomNav() { return document.getElementById('bottom-nav'); }
+
+function showLogin() {
+  document.getElementById('login-view').classList.remove('d-none');
+  document.getElementById('app-view').classList.add('d-none');
+  document.getElementById('apply-panel')?.classList.add('d-none');
+  document.getElementById('login-panel')?.classList.remove('d-none');
+}
+
+function showPublicApplication() {
+  document.getElementById('login-view').classList.remove('d-none');
+  document.getElementById('app-view').classList.add('d-none');
+  document.getElementById('login-panel')?.classList.add('d-none');
+  const panel = document.getElementById('apply-panel');
+  if (panel) {
+    panel.classList.remove('d-none');
+    const sel = document.getElementById('apply-programme');
+    if (sel && !sel.dataset.ready) {
+      const courses = getCourses();
+      sel.innerHTML = '<option value="">Select a programme (optional)</option>' +
+        courses.map((c) => `<option value="${c.id}">${escapeHtml(c.programme || c.title)} — NQF ${c.nqfLevel}</option>`).join('');
+      sel.dataset.ready = '1';
+    }
+  }
+}
+
+function showAwaitingApproval() {
+  document.getElementById('login-view').classList.add('d-none');
+  document.getElementById('app-view').classList.remove('d-none');
+  const s = getSession();
+  document.getElementById('user-chip').textContent = s ? `${s.name} · pending` : '';
+  if (bottomNav()) bottomNav().innerHTML = '';
+  content().innerHTML = `
+    <div class="content-block text-center" style="margin-top:2rem">
+      <div class="splash-logo sm" style="margin:0 auto 1rem">E</div>
+      <h2 class="page-title">Application under review</h2>
+      <p class="text-secondary">Hi ${escapeHtml(s?.name || '')}. Your application was received.</p>
+      <p class="text-secondary">An administrator must approve your access before you can open programmes, modules or assessments.</p>
+      <p class="mb-3"><span class="badge-soft badge-warn">Status: Pending approval</span></p>
+      <p class="text-secondary small">We will notify <strong>${escapeHtml(s?.gmail || s?.email || '')}</strong> when a decision is made.</p>
+      <button type="button" class="btn btn-outline-light w-100 mt-3" id="btn-pending-logout">Sign out</button>
+      <button type="button" class="btn btn-primary w-100 mt-2" id="btn-pending-refresh">Check status</button>
+    </div>`;
+  document.getElementById('btn-pending-logout')?.addEventListener('click', logout);
+  document.getElementById('btn-pending-refresh')?.addEventListener('click', () => {
+    const users = load(KEYS.users, []);
+    const u = users.find((x) => x.id === s.id);
+    if (u && u.status === 'approved') { setSession(u); showApp(); return; }
+    if (u && u.status === 'rejected') { alert('Your application was not approved.'); logout(); return; }
+    alert('Still pending. Please check again later.');
+  });
+}
+
+function setNavActive(nav) {
+  const bar = bottomNav();
+  if (!bar) return;
+  bar.querySelectorAll('a').forEach((a) => {
+    a.classList.toggle('active', a.dataset.nav === nav);
+  });
+}
+
+function wireNav() {
+  const s = getSession();
+  if (!s) return;
+  if (s.role === 'trainer') {
+    bottomNav().innerHTML = `
+      <a href="#" data-nav="home" class="active"><i class="bi bi-grid-1x2"></i>Home</a>
+      <a href="#" data-nav="approvals"><i class="bi bi-person-check"></i>Approvals</a>
+      <a href="#" data-nav="grade"><i class="bi bi-pencil-square"></i>Grade</a>
+      <a href="#" data-nav="catalog"><i class="bi bi-journal-text"></i>Programmes</a>
+      <a href="#" data-nav="about"><i class="bi bi-info-circle"></i>More</a>`;
+  } else {
+    bottomNav().innerHTML = `
+      <a href="#" data-nav="home" class="active"><i class="bi bi-grid-1x2"></i>Home</a>
+      <a href="#" data-nav="catalog"><i class="bi bi-journal-plus"></i>Courses</a>
+      <a href="#" data-nav="messages"><i class="bi bi-envelope"></i>Inbox</a>
+      <a href="#" data-nav="about"><i class="bi bi-info-circle"></i>More</a>`;
+  }
+  bottomNav().querySelectorAll('[data-nav]').forEach((a) => {
+    a.addEventListener('click', (e) => {
+      e.preventDefault();
+      const n = a.dataset.nav;
+      if (n === 'home') goHome();
+      if (n === 'approvals') renderApprovals();
+      if (n === 'grade') renderGrading();
+      if (n === 'catalog') renderCatalog();
+      if (n === 'messages') renderMessages();
+      if (n === 'about') renderAbout();
+      setNavActive(n);
+    });
+  });
+}
+
+function showApp() {
+  document.getElementById('login-view').classList.add('d-none');
+  document.getElementById('app-view').classList.remove('d-none');
+  const s = getSession();
+  if (s && s.role === 'learner') {
+    const users = load(KEYS.users, []);
+    const u = users.find((x) => x.id === s.id);
+    const st = (u && u.status) || 'approved';
+    if (st === 'pending') { showAwaitingApproval(); return; }
+    if (st === 'rejected') { alert('Your application was not approved.'); logout(); return; }
+  }
+  document.getElementById('user-chip').textContent = s ? `${s.name} · ${s.role}` : '';
+  wireNav();
+  goHome();
+}
+
+function goHome() {
+  const s = getSession();
+  if (!s) return showLogin();
+  if (s.role === 'trainer') renderTrainerHome();
+  else renderLearnerHome();
+  setNavActive('home');
+}
+
+function renderTrainerHome() {
+  const courses = getCourses();
+  const enrolments = getEnrolments();
+  const pendingEnrol = enrolments.filter((e) => e.status === 'pending').length;
+  const pendingAccounts = load(KEYS.applications, []).filter((a) => a.status === 'pending').length;
+  const pending = pendingEnrol + pendingAccounts;
+  const toGrade = getSubmissions().filter((s) => s.status === 'submitted').length;
+  const learners = load(KEYS.users, []).filter((u) => u.role === 'learner' && (u.status || 'approved') !== 'pending');
+
+  content().innerHTML = `
+    <h2 class="page-title">Administrator dashboard</h2>
+    <p class="text-secondary small mb-3">Apply → Approve → Access. Tap a tile to open the related screen.</p>
+    <div class="card-grid mb-3">
+      <div class="stat-card stat-link" data-dash="programmes" role="button"><div class="label">Programmes</div><div class="value">${courses.length}</div><div class="stat-hint">Open programmes</div></div>
+      <div class="stat-card stat-link" data-dash="learners" role="button"><div class="label">Learners</div><div class="value">${learners.length}</div><div class="stat-hint">View learners</div></div>
+      <div class="stat-card stat-link" data-dash="pending" role="button"><div class="label">Pending access</div><div class="value">${pending}</div><div class="stat-hint">Open Approvals</div></div>
+      <div class="stat-card stat-link" data-dash="grade" role="button"><div class="label">To grade</div><div class="value">${toGrade}</div><div class="stat-hint">Open grading</div></div>
+    </div>
+    ${pending ? `<div class="list-card list-link" style="border-color:#eab308" data-dash="pending" role="button"><h3>Applications</h3><p>${pendingAccounts} new account(s) · ${pendingEnrol} course request(s). Tap to open Approvals.</p></div>` : ''}
+    <p class="text-secondary small mt-3 mb-0">Demo: approve Thabo under Approvals, then sign in as thabo.apply@gmail.com / pending123.</p>`;
+
+  content().querySelectorAll('[data-dash]').forEach((el) => {
+    el.addEventListener('click', () => {
+      const key = el.getAttribute('data-dash');
+      if (key === 'programmes' || key === 'catalog') { renderCatalog(); setNavActive('catalog'); }
+      if (key === 'learners') renderLearners();
+      if (key === 'pending') { renderApprovals(); setNavActive('approvals'); }
+      if (key === 'grade') { renderGrading(); setNavActive('grade'); }
+    });
+  });
+}
+
+function renderLearners() {
+  const users = load(KEYS.users, []).filter((u) => u.role === 'learner');
+  const enrolments = getEnrolments();
+  const courses = getCourses();
+  content().innerHTML = `<h2 class="page-title">Learners</h2><p class="text-secondary mb-3">${users.length} registered.</p>` +
+    users.map((u) => {
+      const st = u.status || 'approved';
+      const mine = enrolments.filter((e) => e.learnerId === u.id);
+      return `<div class="list-card"><h3>${escapeHtml(u.name)}</h3>
+        <p class="text-secondary small mb-1">${escapeHtml(u.gmail || u.email)}</p>
+        <span class="badge-soft ${st === 'pending' ? 'badge-warn' : st === 'rejected' ? '' : 'badge-ok'}">${st}</span>
+        <p class="text-secondary small mt-2 mb-0">${mine.map((e) => {
+          const c = courses.find((x) => x.id === e.courseId);
+          return `${c?.title || e.courseId} (${e.status})`;
+        }).join('<br>') || 'No course applications'}</p></div>`;
+    }).join('') +
+    `<button class="btn btn-primary w-100 mt-2" id="btn-to-approvals">Open Approvals</button>`;
+  document.getElementById('btn-to-approvals')?.addEventListener('click', () => { renderApprovals(); setNavActive('approvals'); });
+}
+
+function renderApprovals() {
+  const users = load(KEYS.users, []);
+  const courses = getCourses();
+  const pendingEnrol = getEnrolments().filter((e) => e.status === 'pending');
+  const pendingAccounts = load(KEYS.applications, []).filter((a) => a.status === 'pending');
+
+  let html = `<h2 class="page-title">Applications & access</h2>
+    <p class="text-secondary mb-3">First approve new applicants so they can enter the app. Then approve course access.</p>`;
+
+  if (pendingAccounts.length) {
+    html += `<h3 class="h6 text-secondary">New account applications (${pendingAccounts.length})</h3>`;
+    pendingAccounts.forEach((a) => {
+      const prog = courses.find((c) => c.id === a.programmeId);
+      html += `<div class="list-card" style="border-color:#eab308">
+        <h3>${escapeHtml(a.name)} <span class="badge-soft badge-warn">New applicant</span></h3>
+        <p>Gmail: ${escapeHtml(a.email)}${a.phone ? '<br>Phone: ' + escapeHtml(a.phone) : ''}</p>
+        <p class="text-secondary small">Preferred: ${escapeHtml(prog ? (prog.programme || prog.title) : 'Not specified')}</p>
+        ${a.notes ? `<p class="text-secondary small">Notes: ${escapeHtml(a.notes)}</p>` : ''}
+        <textarea class="form-control form-control-sm mb-2" id="acc-notes-${a.id}" rows="2" placeholder="Reason for approve / decline"></textarea>
+        <div class="meta gap-2">
+          <button class="btn btn-sm btn-primary" data-acc-approve="${a.id}">Approve access</button>
+          <button class="btn btn-sm btn-outline-light" data-acc-decline="${a.id}">Decline</button>
+        </div></div>`;
+    });
+  }
+
+  if (pendingEnrol.length) {
+    html += `<h3 class="h6 text-secondary mt-3">Course access requests (${pendingEnrol.length})</h3>`;
+    pendingEnrol.forEach((e) => {
+      const learner = users.find((u) => u.id === e.learnerId);
+      const course = courses.find((c) => c.id === e.courseId);
+      html += `<div class="list-card">
+        <h3>${escapeHtml(learner?.name || 'Learner')} <span class="badge-soft">Course access</span></h3>
+        <p>${escapeHtml(course?.title || 'Course')}<br><span class="text-secondary">Gmail: ${escapeHtml(learner?.gmail || learner?.email || '')}</span></p>
+        <textarea class="form-control form-control-sm mb-2" id="notes-${e.id}" rows="2" placeholder="Reason"></textarea>
+        <div class="meta gap-2">
+          <button class="btn btn-sm btn-primary" data-approve="${e.id}">Approve course</button>
+          <button class="btn btn-sm btn-outline-light" data-decline="${e.id}">Decline</button>
+        </div></div>`;
+    });
+  }
+
+  if (!pendingAccounts.length && !pendingEnrol.length) html += '<div class="empty">No pending applications</div>';
+  content().innerHTML = html;
+
+  content().querySelectorAll('[data-acc-approve]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-acc-approve');
+      const notes = (document.getElementById('acc-notes-' + id)?.value || '').trim();
+      approveAccountApplication(id, true, notes);
+      renderApprovals();
+    });
+  });
+  content().querySelectorAll('[data-acc-decline]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-acc-decline');
+      const notes = (document.getElementById('acc-notes-' + id)?.value || '').trim();
+      if (!notes) { alert('Please add a reason when declining.'); return; }
+      approveAccountApplication(id, false, notes);
+      renderApprovals();
+    });
+  });
+  content().querySelectorAll('[data-approve]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-approve');
+      const notes = (document.getElementById('notes-' + id)?.value || '').trim();
+      const list = getEnrolments();
+      const row = list.find((x) => x.id === id);
+      if (!row) return;
+      row.status = 'approved';
+      row.reviewNotes = notes;
+      row.reviewedAt = new Date().toISOString();
+      saveEnrolments(list);
+      const learner = users.find((u) => u.id === row.learnerId);
+      const course = courses.find((c) => c.id === row.courseId);
+      if (learner) pushMessage(learner.id, learner.gmail || learner.email, 'Course access approved', 'You may now access: ' + (course?.title || 'your programme'));
+      renderApprovals();
+    });
+  });
+  content().querySelectorAll('[data-decline]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-decline');
+      const notes = (document.getElementById('notes-' + id)?.value || '').trim();
+      if (!notes) { alert('Please add a reason when declining.'); return; }
+      const list = getEnrolments();
+      const row = list.find((x) => x.id === id);
+      if (!row) return;
+      row.status = 'declined';
+      row.reviewNotes = notes;
+      saveEnrolments(list);
+      renderApprovals();
+    });
+  });
+}
+
+function renderLearnerHome() {
+  const s = getSession();
+  const enrolments = getEnrolments().filter((e) => e.learnerId === s.id && e.status === 'approved');
+  const courses = getCourses();
+  const settings = load('ef_settings', {});
+  content().innerHTML = `
+    <h2 class="page-title">My learning</h2>
+    <p class="text-secondary mb-3">${escapeHtml(settings.welcomeMessage || 'Welcome.')}</p>
+    ${enrolments.length === 0
+      ? '<div class="empty">No approved programmes yet. Open Courses to apply.</div>'
+      : enrolments.map((e) => {
+          const c = courses.find((x) => x.id === e.courseId);
+          return `<div class="list-card list-link" data-course="${e.courseId}"><h3>${escapeHtml(c?.title || e.courseId)}</h3>
+            <p class="text-secondary small">NQF ${c?.nqfLevel || '?'} · ${c?.credits || '?'} credits · SAQA ${c?.saqaId || ''}</p>
+            <span class="badge-soft badge-ok">Approved access</span></div>`;
+        }).join('')}
+    <button class="btn btn-primary w-100 mt-3" id="btn-browse">Browse programmes</button>`;
+  document.getElementById('btn-browse')?.addEventListener('click', () => { renderCatalog(); setNavActive('catalog'); });
+  content().querySelectorAll('[data-course]').forEach((el) => {
+    el.addEventListener('click', () => renderCourseDetail(el.getAttribute('data-course')));
+  });
+}
+
+function renderCatalog() {
+  const s = getSession();
+  const courses = getCourses();
+  const enrolments = getEnrolments();
+  content().innerHTML = `<h2 class="page-title">${s.role === 'trainer' ? 'Programmes' : 'Course catalogue'}</h2>
+    <p class="text-secondary mb-3">NQF pilot programmes with SAQA register references.</p>` +
+    courses.map((c) => {
+      const enr = enrolments.find((e) => e.learnerId === s.id && e.courseId === c.id);
+      const status = enr ? enr.status : null;
+      return `<div class="list-card">
+        <h3>${escapeHtml(c.title)}</h3>
+        <p class="text-secondary small mb-2">${escapeHtml(c.description || '')}</p>
+        <div class="meta mb-2">
+          <span class="badge-soft">NQF ${c.nqfLevel}</span>
+          <span class="badge-soft">${c.credits} credits</span>
+          <span class="badge-soft">SAQA ${c.saqaId}</span>
+        </div>
+        ${s.role === 'trainer'
+          ? `<button class="btn btn-sm btn-outline-light" data-open="${c.id}">Open modules</button>`
+          : status === 'approved'
+            ? `<button class="btn btn-sm btn-primary" data-open="${c.id}">Continue</button>`
+            : status === 'pending'
+              ? `<span class="badge-soft badge-warn">Application pending</span>`
+              : `<button class="btn btn-sm btn-primary" data-apply="${c.id}">Apply for this programme</button>`}
+      </div>`;
+    }).join('');
+
+  content().querySelectorAll('[data-open]').forEach((btn) => {
+    btn.addEventListener('click', () => renderCourseDetail(btn.getAttribute('data-open')));
+  });
+  content().querySelectorAll('[data-apply]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const courseId = btn.getAttribute('data-apply');
+      const list = getEnrolments().filter((e) => !(e.learnerId === s.id && e.courseId === courseId));
+      list.push({
+        id: uid(), courseId, learnerId: s.id, status: 'pending', enrolledAt: new Date().toISOString(),
+        documents: { hasDisability: false, idCopy: null, matric: null, otherCerts: [], disabilityNote: null },
+        meetsMinimum: false, requirementIssues: ['Documents can be added later'], reviewNotes: '',
+      });
+      saveEnrolments(list);
+      pushMessage(s.id, s.gmail || s.email, 'Course application submitted', 'Your request is pending administrator approval.');
+      alert('Application submitted for review.');
+      renderCatalog();
+    });
+  });
+}
+
+function renderCourseDetail(courseId) {
+  const c = getCourse(courseId);
+  if (!c) return;
+  const s = getSession();
+  content().innerHTML = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-course"><i class="bi bi-arrow-left"></i> Back</button>
+    <h2 class="page-title">${escapeHtml(c.title)}</h2>
+    <p class="text-secondary small">NQF ${c.nqfLevel} · ${c.credits} credits · SAQA ${c.saqaId}</p>
+    <p class="mb-3">${escapeHtml(c.description || '')}</p>
+    <h3 class="h6 text-secondary">Unit standards (register references)</h3>
+    <ul class="text-secondary small">${(c.unitStandards || []).map((u) => `<li>${u.id}: ${escapeHtml(u.title)} (NQF ${u.nqfLevel}, ${u.credits} cr)</li>`).join('')}</ul>
+    <h3 class="h6 text-secondary mt-3">Modules</h3>
+    ${(c.lessons || []).map((l, i) => `<div class="lesson-card"><div class="num">${i + 1}</div><div><h4>${escapeHtml(l.title)}</h4><p>${l.type}</p></div></div>`).join('')}`;
+  document.getElementById('btn-back-course')?.addEventListener('click', () => {
+    if (s.role === 'trainer') { renderCatalog(); setNavActive('catalog'); }
+    else { renderLearnerHome(); setNavActive('home'); }
+  });
+}
+
+function renderGrading() {
+  const subs = getSubmissions().filter((s) => s.status === 'submitted');
+  const users = load(KEYS.users, []);
+  const courses = getCourses();
+  content().innerHTML = `<h2 class="page-title">To grade</h2>
+    <p class="text-secondary mb-3">${subs.length} submission(s) awaiting a mark.</p>` +
+    (subs.length === 0 ? '<div class="empty">Nothing to grade</div>' :
+      subs.map((sub) => {
+        const learner = users.find((u) => u.id === sub.learnerId);
+        const course = courses.find((c) => c.id === sub.courseId);
+        return `<div class="list-card">
+          <h3>${escapeHtml(learner?.name || 'Learner')}</h3>
+          <p class="text-secondary small">${escapeHtml(course?.title || sub.courseId)}</p>
+          <div class="content-block mb-2" style="font-size:.9rem">${escapeHtml(sub.text)}</div>
+          <label class="form-label">Score %</label>
+          <input type="number" class="form-control mb-2" id="score-${sub.id}" min="0" max="100" value="70">
+          <label class="form-label">Feedback</label>
+          <textarea class="form-control mb-2" id="fb-${sub.id}" rows="2"></textarea>
+          <button class="btn btn-sm btn-primary" data-grade="${sub.id}">Save grade</button>
+        </div>`;
+      }).join(''));
+  content().querySelectorAll('[data-grade]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-grade');
+      const score = Number(document.getElementById('score-' + id)?.value) || 0;
+      const feedback = document.getElementById('fb-' + id)?.value || '';
+      const list = getSubmissions();
+      const sub = list.find((s) => s.id === id);
+      if (!sub) return;
+      sub.status = 'graded';
+      sub.score = score;
+      sub.feedback = feedback;
+      sub.gradedAt = new Date().toISOString();
+      sub.passed = score >= 70;
+      save(KEYS.submissions, list);
+      const learner = users.find((u) => u.id === sub.learnerId);
+      if (learner) pushMessage(learner.id, learner.gmail || learner.email, 'Assignment graded: ' + score + '%', feedback || (sub.passed ? 'Pass' : 'Not yet — you may resubmit'));
+      alert('Grade saved.');
+      renderGrading();
+    });
+  });
+}
+
+function renderMessages() {
+  const s = getSession();
+  const messages = load(KEYS.messages, []).filter((m) => m.toUserId === s.id);
+  content().innerHTML = `<h2 class="page-title">Inbox</h2>
+    <p class="text-secondary small mb-3">Communications linked to ${escapeHtml(s.gmail || s.email)}</p>` +
+    (messages.length === 0 ? '<div class="empty">No messages</div>' :
+      messages.map((m) => `<div class="list-card"><h3>${escapeHtml(m.subject)}</h3>
+        <p class="text-secondary small">${new Date(m.at).toLocaleString()}</p>
+        <p class="mb-0">${escapeHtml(m.body)}</p></div>`).join(''));
+}
+
+function renderAbout() {
+  const settings = load('ef_settings', {});
+  content().innerHTML = `<h2 class="page-title">About EduFlow</h2>
+    <div class="content-block">
+      <p><strong>${escapeHtml(settings.providerName || 'EduFlow Training Provider')}</strong></p>
+      <p class="text-secondary small">Contact: ${escapeHtml(settings.contactEmail || '')}</p>
+      <p class="mb-0">Learners apply first. Administrators approve access. Then learners enrol in NQF programmes, complete modules, submit assessments and receive results — with notices linked to Gmail.</p>
+    </div>
+    <p class="text-secondary small mt-3">Live demo: <a href="https://jlephoto23-collab.github.io/EduFlow-LMS/" style="color:#93c5fd">jlephoto23-collab.github.io/EduFlow-LMS</a></p>`;
+}
+
+async function bootEduFlow() {
+  await seedIfNeeded();
+  setTimeout(() => document.getElementById('splash')?.classList.add('hide'), 400);
+
+  onLiveChange(() => {
+    const s = getSession();
+    if (s && s.role === 'learner') {
+      const u = load(KEYS.users, []).find((x) => x.id === s.id);
+      if (u && u.status === 'approved' && document.getElementById('btn-pending-refresh')) showApp();
+    }
+  });
+
+  document.getElementById('login-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const email = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+    const err = document.getElementById('login-error');
+    const result = login(email, password);
+    if (!result.ok) {
+      err.textContent = result.message;
+      err.classList.remove('d-none');
+      return;
+    }
+    err.classList.add('d-none');
+    if (result.pending) showAwaitingApproval();
+    else showApp();
+  });
+
+  document.getElementById('btn-register')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    showPublicApplication();
+  });
+  document.getElementById('btn-show-login')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    showLogin();
+  });
+
+  document.getElementById('apply-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const err = document.getElementById('apply-error');
+    err?.classList.add('d-none');
+    const result = submitAccountApplication({
+      name: document.getElementById('apply-name')?.value.trim() || '',
+      email: document.getElementById('apply-email')?.value.trim() || '',
+      phone: document.getElementById('apply-phone')?.value.trim() || '',
+      password: document.getElementById('apply-password')?.value || '',
+      programmeId: document.getElementById('apply-programme')?.value || '',
+      notes: document.getElementById('apply-notes')?.value.trim() || '',
+    });
+    if (!result.ok) {
+      if (err) { err.textContent = result.message; err.classList.remove('d-none'); }
+      else alert(result.message);
+      return;
+    }
+    showAwaitingApproval();
+  });
+
+  document.getElementById('btn-logout')?.addEventListener('click', logout);
+
+  if (getSession()) showApp();
+  else showLogin();
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootEduFlow);
+} else {
+  bootEduFlow();
 }
