@@ -1,1 +1,1 @@
-PLACEHOLDER
+export default "eNrtfduS3Max4Pt8BdRHcndb0z0jUrK8zbl4xIs9YVKiONQ6vLLCxDQw0zDRQBNAz3BMd4T/4DycjTgv+3x+Yd/3U/wlm5l1yyoULt0kfYk4DFvTAKqybll5q8ysq3U2r5I8C67j6iIuS/g5Ggfv9";
