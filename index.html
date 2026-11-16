@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="EduFlow">
-  <meta name="description" content="EduFlow LMS — applications, modules, assessments and results for training providers">
+  <meta name="description" content="EduFlow LMS — apply, get approved, then access modules, assessments and results">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon.svg">
@@ -37,35 +37,66 @@
         <span class="live-demo-url">jlephoto23-collab.github.io/EduFlow-LMS</span>
       </a>
 
-      <form id="login-form" class="login-form">
-        <label class="form-label">Email (Gmail for learners)</label>
-        <input type="email" id="email" class="form-control form-control-lg mb-3" required placeholder="you@gmail.com" value="admin@eduflow.test">
-        <label class="form-label">Password</label>
-        <input type="password" id="password" class="form-control form-control-lg mb-3" required placeholder="Password" value="admin123">
-        <div id="login-error" class="alert alert-danger d-none py-2"></div>
-        <button type="submit" class="btn btn-primary btn-lg w-100">Sign in</button>
-      </form>
+      <div id="login-panel">
+        <form id="login-form" class="login-form">
+          <label class="form-label">Email (Gmail for learners)</label>
+          <input type="email" id="email" class="form-control form-control-lg mb-3" required placeholder="you@gmail.com" value="admin@eduflow.test">
+          <label class="form-label">Password</label>
+          <input type="password" id="password" class="form-control form-control-lg mb-3" required placeholder="Password" value="admin123">
+          <div id="login-error" class="alert alert-danger d-none py-2"></div>
+          <button type="submit" class="btn btn-primary btn-lg w-100">Sign in</button>
+        </form>
 
-      <button type="button" id="btn-install-app" class="btn btn-outline-light w-100 mt-3 d-none">
-        <i class="bi bi-download"></i> Install App
-      </button>
-      <p id="install-hint" class="text-secondary small text-center mt-2 mb-0">
-        On phone: browser menu → <strong>Add to Home screen</strong>
-      </p>
+        <button type="button" id="btn-install-app" class="btn btn-outline-light w-100 mt-3 d-none">
+          <i class="bi bi-download"></i> Install App
+        </button>
+        <p id="install-hint" class="text-secondary small text-center mt-2 mb-0">
+          On phone: browser menu → <strong>Add to Home screen</strong>
+        </p>
 
-      <p class="text-center mt-3 mb-0">
-        <a href="#" id="btn-register" class="link-light" style="color:#93c5fd">New learner? Register with Gmail</a>
-      </p>
-      <div class="demo-box">
-        <strong>Demo accounts</strong>
-        <div>Admin: admin@eduflow.test / admin123</div>
-        <div>Learner: learner1@gmail.com / learner123</div>
+        <p class="text-center mt-3 mb-0">
+          <a href="#" id="btn-register" class="link-light" style="color:#93c5fd">New learner? Apply for access</a>
+        </p>
+        <div class="demo-box demo-accounts mt-3">
+          <strong>Demo accounts</strong>
+          <div>Admin: admin@eduflow.test / admin123</div>
+          <div>Learner: learner1@gmail.com / learner123</div>
+          <div>Pending applicant: thabo.apply@gmail.com / pending123</div>
+        </div>
+      </div>
+
+      <div id="apply-panel" class="d-none">
+        <h2 class="h5 mb-2">Apply for access</h2>
+        <p class="text-secondary small mb-3">Submit your application first. An administrator must approve you before you can use the app.</p>
+        <form id="apply-form">
+          <label class="form-label">Full name</label>
+          <input type="text" id="apply-name" class="form-control mb-2" required placeholder="Your full name">
+          <label class="form-label">Gmail / email</label>
+          <input type="email" id="apply-email" class="form-control mb-2" required placeholder="you@gmail.com">
+          <label class="form-label">Phone</label>
+          <input type="tel" id="apply-phone" class="form-control mb-2" placeholder="+27 …">
+          <label class="form-label">Password (min 6 characters)</label>
+          <input type="password" id="apply-password" class="form-control mb-2" required minlength="6" placeholder="Create a password">
+          <label class="form-label">Preferred programme</label>
+          <select id="apply-programme" class="form-control mb-2"></select>
+          <label class="form-label">ID / Smart ID (PDF or image)</label>
+          <input type="file" id="apply-id" class="form-control mb-2" accept=".pdf,.jpg,.jpeg,.png,image/*,application/pdf">
+          <label class="form-label">Matric certificate</label>
+          <input type="file" id="apply-matric" class="form-control mb-2" accept=".pdf,.jpg,.jpeg,.png,image/*,application/pdf">
+          <label class="form-label">Notes for the provider</label>
+          <textarea id="apply-notes" class="form-control mb-3" rows="2" placeholder="Optional"></textarea>
+          <div id="apply-error" class="alert alert-danger d-none py-2"></div>
+          <button type="submit" class="btn btn-primary btn-lg w-100">Submit application</button>
+        </form>
+        <p class="text-center mt-3 mb-0">
+          <a href="#" id="btn-show-login" class="link-light" style="color:#93c5fd">Already applied? Sign in</a>
+        </p>
       </div>
     </div>
   </div>
 
   <div id="app-view" class="view d-none">
-    <header class="topbar">
+    <header class="topbar app-header">
       <div class="d-flex align-items-center gap-2">
         <button type="button" class="btn btn-sm btn-outline-light d-none" id="btn-back"><i class="bi bi-arrow-left"></i></button>
         <span class="brand">EduFlow</span>
@@ -80,15 +111,13 @@
     <nav class="bottom-nav" id="bottom-nav"></nav>
   </div>
 
-  <script type="module" src="js/app.js?v=20261113b"></script>
+  <script type="module" src="js/app.js?v=20261116a"></script>
   <script>
-    // Never leave the user stuck on the splash screen
     setTimeout(function () {
       var s = document.getElementById('splash');
       if (s) s.classList.add('hide');
     }, 2500);
 
-    // PWA install prompt
     let deferredPrompt = null;
     const btnInstall = document.getElementById('btn-install-app');
     window.addEventListener('beforeinstallprompt', (e) => {
@@ -107,10 +136,9 @@
       btnInstall.classList.add('d-none');
     });
 
-    // Service worker (offline + installable) — update on next load
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=20261113b').catch(() => {});
+        navigator.serviceWorker.register('./sw.js?v=20261116a').catch(() => {});
       });
     }
   </script>
