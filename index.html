@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="EduFlow">
-  <meta name="description" content="EduFlow LMS — apply, get approved, then access modules, assessments and results">
+  <meta name="description" content="EduFlow LMS — create account, apply, get approved, then learn">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon.svg">
@@ -37,6 +37,14 @@
         <span class="live-demo-url">jlephoto23-collab.github.io/EduFlow-LMS</span>
       </a>
 
+      <div id="auth-steps" class="d-flex justify-content-center gap-2 mb-3" style="font-size:.75rem;color:#94a3b8">
+        <span id="step-1-label">1. Create account</span>
+        <span>→</span>
+        <span id="step-2-label">2. Apply</span>
+        <span>→</span>
+        <span id="step-3-label">3. Get approved</span>
+      </div>
+
       <div id="login-panel">
         <form id="login-form" class="login-form">
           <label class="form-label">Email (Gmail for learners)</label>
@@ -55,41 +63,63 @@
         </p>
 
         <p class="text-center mt-3 mb-0">
-          <a href="#" id="btn-register" class="link-light" style="color:#93c5fd">New learner? Apply for access</a>
+          <a href="#" id="btn-register" class="link-light" style="color:#93c5fd">New learner? Create account</a>
         </p>
         <div class="demo-box demo-accounts mt-3">
           <strong>Demo accounts</strong>
           <div>Admin: admin@eduflow.test / admin123</div>
           <div>Learner: learner1@gmail.com / learner123</div>
-          <div>Pending applicant: thabo.apply@gmail.com / pending123</div>
+          <div>Pending: thabo.apply@gmail.com / pending123</div>
         </div>
       </div>
 
-      <div id="apply-panel" class="d-none">
-        <h2 class="h5 mb-2">Apply for access</h2>
-        <p class="text-secondary small mb-3">Submit your application first. An administrator must approve you before you can use the app.</p>
-        <form id="apply-form">
+      <div id="register-panel" class="d-none">
+        <h2 class="h5 mb-1">Step 1 — Create your account</h2>
+        <p class="text-secondary small mb-3">Register with Gmail. Next you will complete your application.</p>
+        <form id="register-form">
           <label class="form-label">Full name</label>
-          <input type="text" id="apply-name" class="form-control mb-2" required placeholder="Your full name">
+          <input type="text" id="reg-name" class="form-control mb-2" required placeholder="Your full name">
           <label class="form-label">Gmail / email</label>
-          <input type="email" id="apply-email" class="form-control mb-2" required placeholder="you@gmail.com">
+          <input type="email" id="reg-email" class="form-control mb-2" required placeholder="you@gmail.com">
           <label class="form-label">Phone</label>
-          <input type="tel" id="apply-phone" class="form-control mb-2" placeholder="+27 …">
+          <input type="tel" id="reg-phone" class="form-control mb-2" placeholder="+27 …">
           <label class="form-label">Password (min 6 characters)</label>
-          <input type="password" id="apply-password" class="form-control mb-2" required minlength="6" placeholder="Create a password">
+          <input type="password" id="reg-password" class="form-control mb-2" required minlength="6" placeholder="Create a password">
+          <label class="form-label">Confirm password</label>
+          <input type="password" id="reg-password2" class="form-control mb-3" required minlength="6" placeholder="Repeat password">
+          <div id="reg-error" class="alert alert-danger d-none py-2"></div>
+          <button type="submit" class="btn btn-primary btn-lg w-100">Create account & continue</button>
+        </form>
+        <p class="text-center mt-3 mb-0">
+          <a href="#" id="btn-show-login-from-reg" class="link-light" style="color:#93c5fd">Already have an account? Sign in</a>
+        </p>
+      </div>
+
+      <div id="apply-panel" class="d-none">
+        <h2 class="h5 mb-1">Step 2 — Application</h2>
+        <p class="text-secondary small mb-3">Choose a programme and upload supporting documents. An administrator must approve you before you can use the full app.</p>
+        <form id="apply-form">
           <label class="form-label">Preferred programme</label>
-          <select id="apply-programme" class="form-control mb-2"></select>
+          <select id="apply-programme" class="form-control mb-2" required></select>
           <label class="form-label">ID / Smart ID (PDF or image)</label>
           <input type="file" id="apply-id" class="form-control mb-2" accept=".pdf,.jpg,.jpeg,.png,image/*,application/pdf">
           <label class="form-label">Matric certificate</label>
           <input type="file" id="apply-matric" class="form-control mb-2" accept=".pdf,.jpg,.jpeg,.png,image/*,application/pdf">
+          <label class="form-label">Other certificates (optional)</label>
+          <input type="file" id="apply-other" class="form-control mb-2" accept=".pdf,.jpg,.jpeg,.png,image/*,application/pdf" multiple>
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" id="apply-disability">
+            <label class="form-check-label text-secondary small" for="apply-disability">I live with a disability (doctor’s note required)</label>
+          </div>
+          <label class="form-label">Doctor’s note (if applicable)</label>
+          <input type="file" id="apply-note" class="form-control mb-2" accept=".pdf,.jpg,.jpeg,.png,image/*,application/pdf">
           <label class="form-label">Notes for the provider</label>
           <textarea id="apply-notes" class="form-control mb-3" rows="2" placeholder="Optional"></textarea>
           <div id="apply-error" class="alert alert-danger d-none py-2"></div>
           <button type="submit" class="btn btn-primary btn-lg w-100">Submit application</button>
         </form>
         <p class="text-center mt-3 mb-0">
-          <a href="#" id="btn-show-login" class="link-light" style="color:#93c5fd">Already applied? Sign in</a>
+          <a href="#" id="btn-show-login" class="link-light" style="color:#93c5fd">Sign out / back to sign in</a>
         </p>
       </div>
     </div>
@@ -111,7 +141,7 @@
     <nav class="bottom-nav" id="bottom-nav"></nav>
   </div>
 
-  <script type="module" src="js/app.js?v=20261116c"></script>
+  <script type="module" src="js/app.js?v=20261116d"></script>
   <script>
     setTimeout(function () {
       var s = document.getElementById('splash');
@@ -138,7 +168,7 @@
 
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=20261116c').catch(() => {});
+        navigator.serviceWorker.register('./sw.js?v=20261116d').catch(() => {});
       });
     }
   </script>
