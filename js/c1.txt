@@ -357,12 +357,15 @@ function renderMessages() {
 }
 
 function renderAbout() {
-  content().innerHTML = `<h2 class="page-title">About EduFlow</h2><div class="content-block"><p class="mb-2"><strong>Rules</strong></p><ul class="text-secondary small mb-0"><li>Create account → verify email → apply with documents</li><li>One active programme per learner</li><li>Admin reviews then approves</li><li>Remote attendance</li><li>Assignments show response, files, and status</li></ul></div>`;
+  content().innerHTML = `<h2 class="page-title">About EduFlow</h2><div class="content-block"><p class="mb-2"><strong>Rules</strong></p><ul class="text-secondary small mb-0"><li>Create account → verify email → apply with documents</li><li>One active programme per learner</li><li>Admin reviews then approves</li><li>Remote attendance</li><li>Dark / light theme (moon/sun button in header)</li></ul></div>
+  <button class="btn btn-outline-light w-100 mt-3" id="btn-theme-about">Toggle dark / light theme</button>`;
+  document.getElementById('btn-theme-about')?.addEventListener('click', toggleTheme);
 }
 
 async function bootEduFlow() {
   await seedIfNeeded();
   enforceOneProgrammeRule();
+  wireThemeToggles();
   setTimeout(() => document.getElementById('splash')?.classList.add('hide'), 400);
   document.getElementById('login-form')?.addEventListener('submit', (e) => {
     e.preventDefault();
