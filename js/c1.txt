@@ -3,9 +3,6 @@ function renderCatalog() {
   const courses = getCourses();
   const enrolments = getEnrolments();
   content().innerHTML = `<h2 class="page-title">${s.role === 'trainer' ? 'Programmes' : 'Course catalogue'}</h2><p class="text-secondary mb-3">Learners may only have <strong>one active programme</strong> at a time.</p>` +
-    courses.map = getCourses();
-  const enrolments = getEnrolments();
-  content().innerHTML = `<h2 class="page-title">${s.role === 'trainer' ? 'Programmes' : 'Course catalogue'}</h2><p class="text-secondary mb-3">Learners may only have <strong>one active programme</strong> at a time.</p>` +
     courses.map((c) => {
       const enr = enrolments.find((e) => e.learnerId === s.id && e.courseId === c.id);
       const status = enr ? enr.status : null;
