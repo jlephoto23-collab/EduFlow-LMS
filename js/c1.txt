@@ -2,7 +2,7 @@ function renderCatalog() {
   const s = getSession();
   const courses = getCourses();
   const enrolments = getEnrolments();
-  content().innerHTML = `<h2 class="page-title">${s.role === 'trainer' ? 'Programmes' : 'Course catalogue'}</h2><p class="text-secondary mb-3">Learners may only have <strong>one active programme</strong> at a time.</p>` +
+  content().innerHTML = `<h2 class="page-title">${s.role === 'trainer' ? 'Programmes' : 'Course catalogue'}</h2><p class="text-secondary mb-3">Select a programme to apply. Learners may hold <strong>one active programme</strong> at a time.</p>` +
     courses.map((c) => {
       const enr = enrolments.find((e) => e.learnerId === s.id && e.courseId === c.id);
       const status = enr ? enr.status : null;
@@ -75,8 +75,7 @@ function renderCourseDetail(courseId) {
   if (chunk.length) modules.push({ title: 'Module ' + (modules.length + 1), lessons: chunk });
   let html = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-course"><i class="bi bi-arrow-left"></i> Back</button>
   <div class="course-hero"><div class="course-hero-inner"><h1>${escapeHtml(c.programme || c.title)}</h1><p class="mb-0 small opacity-75">NQF ${c.nqfLevel} · ${c.credits} credits · SAQA ${escapeHtml(c.saqaId || '')}</p></div></div>
-  <div class="apex-card mb-3">
-    <h3 class="apex-section-title">Course documents</h3>
+  <div class="apex-card mb-3"><h3 class="apex-section-title">Course documents</h3>
     ${docs.map((d) => `<div class="activity-row clickable" data-doc="${d.id}" role="button"><div class="activity-left"><i class="bi ${d.icon}"></i><span>${escapeHtml(d.title)}</span></div><span class="status-pill ${d.done ? 'status-done' : 'status-todo'}">${d.done ? '✓ Done' : 'To do'}</span></div>`).join('')}
   </div>
   <div class="apex-card mb-3">
@@ -86,10 +85,7 @@ function renderCourseDetail(courseId) {
     </div>
     ${modules.map((m, mi) => {
       const mDone = m.lessons.filter((l) => getLessonStatus(courseId, l, learnerId).done).length;
-      return `<div class="module-card" data-module="${mi}" role="button">
-        <div class="module-card-top"><h4>${escapeHtml(m.title)}</h4><i class="bi bi-chevron-right"></i></div>
-        <div class="module-card-meta"><span><i class="bi bi-list-task"></i> Activities: ${m.lessons.length}</span><span><i class="bi bi-graph-up"></i> Progress: ${mDone} / ${m.lessons.length}</span></div>
-      </div>`;
+      return `<div class="module-card" data-module="${mi}" role="button"><div class="module-card-top"><h4>${escapeHtml(m.title)}</h4><i class="bi bi-chevron-right"></i></div><div class="module-card-meta"><span><i class="bi bi-list-task"></i> Activities: ${m.lessons.length}</span><span><i class="bi bi-graph-up"></i> Progress: ${mDone} / ${m.lessons.length}</span></div></div>`;
     }).join('')}
   </div>`;
   content().innerHTML = html;
@@ -98,10 +94,7 @@ function renderCourseDetail(courseId) {
     else { renderLearnerHome(); setNavActive('home'); }
   });
   content().querySelectorAll('[data-module]').forEach((el) => {
-    el.addEventListener('click', () => {
-      const mi = Number(el.getAttribute('data-module'));
-      renderModuleSection(courseId, modules[mi], mi);
-    });
+    el.addEventListener('click', () => renderModuleSection(courseId, modules[Number(el.getAttribute('data-module'))], Number(el.getAttribute('data-module'))));
   });
   content().querySelectorAll('[data-doc]').forEach((el) => {
     el.addEventListener('click', () => openCourseDocument(courseId, el.getAttribute('data-doc')));
@@ -111,16 +104,13 @@ function renderCourseDetail(courseId) {
 function openCourseDocument(courseId, docId) {
   const titles = { ann: 'Announcements', policy: 'Learner Policy Document', id: 'ID Copy', matric: 'Highest Secondary Education Certificate', cv: 'Curriculum Vitae' };
   const bodies = {
-    ann: 'Welcome to your programme. Check this space for provider notices, class schedules and assessment dates.\n\nDemo announcement: Orientation session details will be posted here.',
-    policy: 'Learner Policy (demo summary)\n\n1. Attend scheduled sessions or mark remote attendance.\n2. Submit assessments by the due date.\n3. Upload original supporting documents only.\n4. Academic integrity is required.\n5. Contact the provider for support.\n\nTap Mark as Done after reading.',
-    id: 'ID / Smart ID on file from your application. Contact admin if you need to replace the file.',
+    ann: 'Welcome to your programme. Check this space for provider notices, class schedules and assessment dates.\n\nOrientation details will be posted here.',
+    policy: 'Learner Policy (summary)\n\n1. Attend sessions or mark remote attendance.\n2. Submit assessments by the due date.\n3. Upload original supporting documents only.\n4. Academic integrity is required.\n5. Contact the provider for support.',
+    id: 'ID / Smart ID on file from your application.',
     matric: 'Highest secondary education certificate on file from your application.',
     cv: 'Curriculum Vitae — mark as done after reviewing.',
   };
-  content().innerHTML = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-doc"><i class="bi bi-arrow-left"></i> Back</button>
-  <h2 class="page-title">${escapeHtml(titles[docId] || 'Document')}</h2>
-  <div class="content-block apex-doc">${formatBody(bodies[docId] || 'Document content.')}</div>
-  <button class="btn btn-primary w-100 mt-2" id="btn-doc-done">Mark as Done</button>`;
+  content().innerHTML = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-doc"><i class="bi bi-arrow-left"></i> Back</button><h2 class="page-title">${escapeHtml(titles[docId] || 'Document')}</h2><div class="content-block apex-doc">${formatBody(bodies[docId] || 'Document content.')}</div><button class="btn btn-primary w-100 mt-2" id="btn-doc-done">Mark as Done</button>`;
   document.getElementById('btn-back-doc')?.addEventListener('click', () => renderCourseDetail(courseId));
   document.getElementById('btn-doc-done')?.addEventListener('click', () => {
     const s = getSession();
@@ -142,10 +132,7 @@ function renderModuleSection(courseId, mod, mi) {
       const st = getLessonStatus(courseId, l, learnerId);
       const icon = l.type === 'guide' || l.type === 'content' ? 'bi-file-earmark-pdf' : l.type === 'quiz' ? 'bi-pencil-square' : 'bi-upload';
       const due = l.type === 'assignment' || l.type === 'quiz' ? '<div class="activity-dates">Opened: enrolment · Due: end of programme</div>' : '';
-      return `<div class="activity-row clickable" data-lesson="${l.id}" role="button">
-        <div class="activity-left"><i class="bi ${icon}"></i><div><span class="activity-title">${escapeHtml(l.title)}</span>${due}</div></div>
-        <span class="status-pill ${st.cls}">${st.label}</span>
-      </div>`;
+      return `<div class="activity-row clickable" data-lesson="${l.id}" role="button"><div class="activity-left"><i class="bi ${icon}"></i><div><span class="activity-title">${escapeHtml(l.title)}</span>${due}</div></div><span class="status-pill ${st.cls}">${st.label}</span></div>`;
     }).join('')}
   </div>`;
   document.getElementById('btn-back-mod')?.addEventListener('click', () => renderCourseDetail(courseId));
@@ -184,12 +171,7 @@ function openLesson(courseId, lesson, isTrainer) {
     return;
   }
   if (lesson.type === 'assignment') return openAssignmentLesson(courseId, lesson, isTrainer);
-  content().innerHTML = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-lesson"><i class="bi bi-arrow-left"></i> Back</button>
-  <div class="status-chips mb-2"><span class="chip chip-ok">✓ Opened</span></div>
-  <h2 class="page-title">${escapeHtml(lesson.title)}</h2>
-  <p class="text-secondary small mb-3">${lesson.type === 'guide' ? 'Learner guide' : 'Learning content'}</p>
-  <div class="content-block apex-doc">${formatBody(lesson.body)}</div>
-  <button class="btn btn-primary w-100 mt-3" id="btn-mark-done">Mark as Done</button>`;
+  content().innerHTML = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-lesson"><i class="bi bi-arrow-left"></i> Back</button><div class="status-chips mb-2"><span class="chip chip-ok">✓ Opened</span></div><h2 class="page-title">${escapeHtml(lesson.title)}</h2><p class="text-secondary small mb-3">${lesson.type === 'guide' ? 'Learner guide' : 'Learning content'}</p><div class="content-block apex-doc">${formatBody(lesson.body)}</div><button class="btn btn-primary w-100 mt-3" id="btn-mark-done">Mark as Done</button>`;
   document.getElementById('btn-back-lesson')?.addEventListener('click', () => renderCourseDetail(courseId));
   document.getElementById('btn-mark-done')?.addEventListener('click', () => {
     const s = getSession();
@@ -217,13 +199,8 @@ function openAssignmentLesson(courseId, lesson, isTrainer) {
     return;
   }
   if (mine && mine.status === 'graded') {
-    content().innerHTML = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-lesson"><i class="bi bi-arrow-left"></i> Back</button>
-    <h2 class="page-title">${escapeHtml(lesson.title)}</h2>
-    <div class="status-chips mb-3">
-      <span class="chip chip-ok">✓ Make a submission</span>
-      <span class="chip chip-ok">✓ Receive a grade</span>
-      <span class="chip ${mine.passed ? 'chip-ok' : 'chip-warn'}">${mine.passed ? '✓' : '✗'} Receive a passing grade</span>
-    </div>
+    content().innerHTML = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-lesson"><i class="bi bi-arrow-left"></i> Back</button><h2 class="page-title">${escapeHtml(lesson.title)}</h2>
+    <div class="status-chips mb-3"><span class="chip chip-ok">✓ Make a submission</span><span class="chip chip-ok">✓ Receive a grade</span><span class="chip ${mine.passed ? 'chip-ok' : 'chip-warn'}">${mine.passed ? '✓' : '✗'} Receive a passing grade</span></div>
     <h3 class="h6">Submission status</h3>
     <table class="status-table">
       <tr><th>Attempt number</th><td>Attempt 1 (2 attempts allowed)</td></tr>
@@ -240,15 +217,11 @@ function openAssignmentLesson(courseId, lesson, isTrainer) {
   }
   if (mine && mine.status === 'submitted') {
     const files = [mine.attachments?.knowledge, mine.attachments?.practical].filter(Boolean);
-    const fileRows = files.length
-      ? files.map((f) => `<div class="mb-1">${fileLinkHtml(f)}</div>`).join('')
-      : '<span class="text-secondary">No files attached yet</span>';
-    content().innerHTML = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-lesson"><i class="bi bi-arrow-left"></i> Back</button>
-    <h2 class="page-title">${escapeHtml(lesson.title)}</h2>
+    const fileRows = files.length ? files.map((f) => `<div class="mb-1">${fileLinkHtml(f)}</div>`).join('') : '<span class="text-secondary">No files attached yet</span>';
+    content().innerHTML = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-lesson"><i class="bi bi-arrow-left"></i> Back</button><h2 class="page-title">${escapeHtml(lesson.title)}</h2>
     <div class="status-chips mb-3"><span class="chip chip-ok">✓ Make a submission</span><span class="chip">Receive a grade</span><span class="chip">Receive a passing grade</span></div>
     <p class="text-secondary small mb-3">Opened: enrolment date<br>Due: end of programme</p>
-    <h3 class="h6">Your response</h3>
-    <div class="content-block mb-3" style="font-size:.9rem">${formatBody(mine.text || '—')}</div>
+    <h3 class="h6">Your response</h3><div class="content-block mb-3" style="font-size:.9rem">${formatBody(mine.text || '—')}</div>
     <h3 class="h6">Submission status</h3>
     <table class="status-table">
       <tr><th>Attempt number</th><td>This is attempt 1 (2 attempts allowed).</td></tr>
@@ -292,7 +265,7 @@ function showAssignmentSubmitForm(courseId, lesson, previous) {
         list.push({ id: uid(), assignmentId: lesson.assignmentId, courseId, learnerId: s.id, text, status: 'submitted', submittedAt: new Date().toISOString(), score: null, feedback: '', attachments: { knowledge, practical } });
       }
       save(KEYS.submissions, list);
-      alert('Submitted.');
+      alert('Submitted successfully.');
       openAssignmentLesson(courseId, lesson, false);
     } catch (e) {
       if (err) { err.textContent = 'Upload failed.'; err.classList.remove('d-none'); }
@@ -304,8 +277,8 @@ function showAssignmentSubmitForm(courseId, lesson, previous) {
 function renderGrading() {
   const subs = getSubmissions().filter((s) => s.status === 'submitted');
   const users = load(KEYS.users, []);
-  content().innerHTML = `<h2 class="page-title">To grade</h2>` +
-    (subs.length === 0 ? '<div class="empty">Nothing to grade</div>' : subs.map((sub) => {
+  content().innerHTML = `<h2 class="page-title">Submissions to grade</h2>` +
+    (subs.length === 0 ? '<div class="empty">Nothing waiting to be graded</div>' : subs.map((sub) => {
       const learner = users.find((u) => u.id === sub.learnerId);
       return `<div class="list-card"><h3>${escapeHtml(learner?.name || 'Learner')}</h3><div class="content-block mb-2" style="font-size:.9rem">${formatBody(sub.text)}</div><div class="content-block mb-2" style="font-size:.85rem"><p class="mb-1">Knowledge: ${fileLinkHtml(sub.attachments?.knowledge)}</p><p class="mb-0">Practical: ${fileLinkHtml(sub.attachments?.practical)}</p></div><label class="form-label small">Score %</label><input type="number" class="form-control mb-2" id="score-${sub.id}" min="0" max="100" value="70"><label class="form-label small">Feedback</label><textarea class="form-control mb-2" id="fb-${sub.id}" rows="2"></textarea><button class="btn btn-sm btn-primary" data-grade="${sub.id}">Save grade</button></div>`;
     }).join(''));
@@ -340,7 +313,7 @@ function renderAttendance() {
   }
   const enrolments = getApprovedEnrolments(s.id);
   const day = todayISODate();
-  content().innerHTML = `<h2 class="page-title">Mark attendance</h2><p class="text-secondary mb-3">Today <strong>${day}</strong></p>${enrolments.length === 0 ? '<div class="empty">No active programme.</div>' : enrolments.map((e) => { const c = courses.find((x) => x.id === e.courseId); const already = attendance.find((a) => a.learnerId === s.id && a.courseId === e.courseId && a.date === day); return `<div class="list-card"><h3>${escapeHtml(c?.title || 'Programme')}</h3>${already ? `<p class="mb-0"><span class="badge-soft badge-ok">Present today</span></p>` : `<button class="btn btn-sm btn-primary" data-mark="${e.courseId}">Mark present (remote)</button>`}</div>`; }).join('')}`;
+  content().innerHTML = `<h2 class="page-title">Mark attendance</h2><p class="page-subtitle">Today <strong>${day}</strong></p>${enrolments.length === 0 ? '<div class="empty">No active programme.</div>' : enrolments.map((e) => { const c = courses.find((x) => x.id === e.courseId); const already = attendance.find((a) => a.learnerId === s.id && a.courseId === e.courseId && a.date === day); return `<div class="list-card"><h3>${escapeHtml(c?.title || 'Programme')}</h3>${already ? `<p class="mb-0"><span class="badge-soft badge-ok">Present today</span></p>` : `<button class="btn btn-sm btn-primary" data-mark="${e.courseId}">Mark present (remote)</button>`}</div>`; }).join('')}`;
   content().querySelectorAll('[data-mark]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const result = markAttendance(s.id, btn.getAttribute('data-mark'), 'Remote session');
@@ -353,12 +326,31 @@ function renderAttendance() {
 function renderMessages() {
   const s = getSession();
   const messages = load(KEYS.messages, []).filter((m) => m.toUserId === s.id);
-  content().innerHTML = `<h2 class="page-title">Inbox</h2>` + (messages.length === 0 ? '<div class="empty">No messages</div>' : messages.map((m) => `<div class="list-card"><h3>${escapeHtml(m.subject)}</h3><p class="mb-0">${escapeHtml(m.body)}</p></div>`).join(''));
+  content().innerHTML = `<h2 class="page-title">Inbox</h2>` + (messages.length === 0 ? '<div class="empty">No messages yet</div>' : messages.map((m) => `<div class="list-card"><h3>${escapeHtml(m.subject)}</h3><p class="mb-0">${escapeHtml(m.body)}</p></div>`).join(''));
 }
 
 function renderAbout() {
-  content().innerHTML = `<h2 class="page-title">About EduFlow</h2><div class="content-block"><p class="mb-2"><strong>Rules</strong></p><ul class="text-secondary small mb-0"><li>Create account → verify email → apply with documents</li><li>One active programme per learner</li><li>Admin reviews then approves</li><li>Remote attendance</li><li>Dark / light theme (moon/sun button in header)</li></ul></div>
-  <button class="btn btn-outline-light w-100 mt-3" id="btn-theme-about">Toggle dark / light theme</button>`;
+  content().innerHTML = `<div class="welcome-banner"><h2>EduFlow LMS</h2><p>Built for training providers who need a clear path from application to competence.</p></div>
+  <div class="content-block mb-3"><p class="mb-2"><strong>What this platform supports</strong></p>
+    <ul class="text-secondary small mb-0">
+      <li>Learner registration with email verification</li>
+      <li>Application with ID, Matric and supporting documents</li>
+      <li>Administrator review and approval</li>
+      <li>One active NQF programme per learner</li>
+      <li>Modules, learner guides, quizzes and file submissions</li>
+      <li>Grading with feedback and remote attendance</li>
+      <li>In-app messaging linked to the learner&apos;s email</li>
+    </ul>
+  </div>
+  <div class="content-block mb-3"><p class="mb-2"><strong>Pilot programmes</strong></p>
+    <ul class="text-secondary small mb-0">
+      <li>Project Management NQF 4</li>
+      <li>Generic Management NQF 4</li>
+      <li>Business Administration NQF 4</li>
+    </ul>
+    <p class="text-secondary small mt-2 mb-0">SAQA IDs are public register references. Learning content is pilot material for demonstration.</p>
+  </div>
+  <button class="btn btn-outline-light w-100" id="btn-theme-about"><i class="bi bi-circle-half me-1"></i> Toggle dark / light theme</button>`;
   document.getElementById('btn-theme-about')?.addEventListener('click', toggleTheme);
 }
 
@@ -404,8 +396,7 @@ async function bootEduFlow() {
     err?.classList.add('d-none');
     const s = getSession();
     if (!s) { showLogin(); return; }
-    const code = document.getElementById('verify-code')?.value.trim() || '';
-    const result = verifyLearnerEmail(s.id, code);
+    const result = verifyLearnerEmail(s.id, document.getElementById('verify-code')?.value.trim() || '');
     if (!result.ok) { if (err) { err.textContent = result.message; err.classList.remove('d-none'); } return; }
     showApplicationStep(result.user);
   });
