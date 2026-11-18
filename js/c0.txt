@@ -1,7 +1,7 @@
 const MAX_FILE_BYTES = 1.5 * 1024 * 1024;
 
 function escapeHtml(s) {
-  return String(s ?? '').replace(/&/g,'&').replace(/</g,'<').replace(/>/g,'>').replace(/"/g,'"');
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 function formatBody(t) { return escapeHtml(t || '').replace(/\n/g, '<br>'); }
 function formatSize(n) {
@@ -84,6 +84,30 @@ async function sendWelcomeEmail({ to, name, code }) {
     }
   }
   return { ok: true, mode: 'local' };
+}
+function getTheme() {
+  try {
+    return localStorage.getItem('ef_theme') || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+  } catch { return 'dark'; }
+}
+function applyTheme(theme) {
+  const t = theme === 'light' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', t);
+  try { localStorage.setItem('ef_theme', t); } catch {}
+  const meta = document.getElementById('meta-theme-color');
+  if (meta) meta.setAttribute('content', t === 'light' ? '#f1f5f9' : '#0f172a');
+  document.querySelectorAll('#theme-icon, #theme-icon-login').forEach((icon) => {
+    if (!icon) return;
+    icon.className = t === 'light' ? 'bi bi-sun-fill' : 'bi bi-moon-stars-fill';
+  });
+}
+function toggleTheme() {
+  applyTheme(getTheme() === 'dark' ? 'light' : 'dark');
+}
+function wireThemeToggles() {
+  document.getElementById('btn-theme-toggle')?.addEventListener('click', toggleTheme);
+  document.getElementById('btn-theme-login')?.addEventListener('click', toggleTheme);
+  applyTheme(getTheme());
 }
 function getCourses() { return load(KEYS.courses, []); }
 function getCourse(id) { return getCourses().find((c) => c.id === id); }
