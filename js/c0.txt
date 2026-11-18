@@ -30,11 +30,11 @@ async function readFilesFromInput(inputEl, multiple) {
   return out;
 }
 function fileLinkHtml(doc) {
-  if (!doc) return '<span class="text-secondary">Not uploaded</span>';
-  const label = `${escapeHtml(doc.name)} (${formatSize(doc.size)})`;
+  if (!doc) return '<span class="text-secondary">—</span>';
+  const label = `${escapeHtml(doc.name || 'File')} (${formatSize(doc.size)})`;
   if (doc.tooLarge) return `<span class="badge-soft badge-warn">${label} — too large (max 1.5MB)</span>`;
   if (doc.dataUrl) return `<a href="${doc.dataUrl}" target="_blank" rel="noopener" style="color:#93c5fd">${label}</a>`;
-  return `<span class="text-secondary">${label}</span>`;
+  return `<span class="badge-soft">${label}</span>`;
 }
 function getSession() { return load(KEYS.session, null); }
 function setSession(user) {
@@ -352,7 +352,7 @@ function renderTrainerHome() {
 function renderLearners() {
   const users = load(KEYS.users, []).filter((u) => u.role === 'learner');
   const courses = getCourses();
-  content().innerHTML = `<h2 class="page-title">Learners</h2><p class="text-secondary mb-3">One active programme per learner. Complete a programme to free the slot for another.</p>` + users.map((u) => {
+  content().innerHTML = `<h2 class="page-title">Learners</h2><p class="text-secondary mb-3">One active programme per learner.</p>` + users.map((u) => {
     const st = u.status || 'approved';
     const active = getApprovedEnrolments(u.id);
     const enr = active[0];
@@ -361,7 +361,7 @@ function renderLearners() {
   }).join('');
   content().querySelectorAll('[data-complete]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      if (!confirm('Mark this programme as complete? Learner can then apply for another programme.')) return;
+      if (!confirm('Mark this programme as complete?')) return;
       const list = getEnrolments();
       const row = list.find((x) => x.id === btn.getAttribute('data-complete'));
       if (row) {
@@ -369,7 +369,7 @@ function renderLearners() {
         row.completedAt = new Date().toISOString();
         saveEnrolments(list);
         const learner = load(KEYS.users, []).find((u) => u.id === row.learnerId);
-        if (learner) pushMessage(learner.id, learner.gmail || learner.email, 'Programme completed', 'Your programme was marked complete. You may apply for another programme under Courses.');
+        if (learner) pushMessage(learner.id, learner.gmail || learner.email, 'Programme completed', 'You may apply for another programme under Courses.');
       }
       renderLearners();
     });
@@ -380,13 +380,13 @@ function renderApprovals() {
   const courses = getCourses();
   const pendingAccounts = load(KEYS.applications, []).filter((a) => a.status === 'pending');
   const pendingEnrol = getEnrolments().filter((e) => e.status === 'pending');
-  let html = `<h2 class="page-title">Applications & access</h2><p class="text-secondary mb-3">Learners may only have <strong>one active programme</strong> at a time.</p>`;
+  let html = `<h2 class="page-title">Applications & access</h2><p class="text-secondary mb-3">One active programme per learner.</p>`;
   if (pendingAccounts.length) {
     html += `<h3 class="h6 text-secondary">New account applications (${pendingAccounts.length})</h3>`;
     pendingAccounts.forEach((a) => {
       const prog = courses.find((c) => c.id === a.programmeId);
       const d = a.documents || {};
-      html += `<div class="list-card" style="border-color:#eab308"><h3>${escapeHtml(a.name)} <span class="badge-soft badge-warn">New applicant</span></h3><p>${escapeHtml(a.email)}</p><p class="text-secondary small">Programme: ${escapeHtml(prog ? (prog.programme || prog.title) : '—')}</p><div class="content-block mb-2" style="font-size:.85rem"><p class="mb-1"><strong>Documents</strong></p><p class="mb-1">ID: ${fileLinkHtml(d.idCopy)}</p><p class="mb-1">Matric: ${fileLinkHtml(d.matric)}</p></div><textarea class="form-control form-control-sm mb-2" id="acc-notes-${a.id}" rows="2"></textarea><button class="btn btn-sm btn-primary me-2" data-acc-approve="${a.id}">Approve access</button><button class="btn btn-sm btn-outline-light" data-acc-decline="${a.id}">Decline</button></div>`;
+      html += `<div class="list-card" style="border-color:#eab308"><h3>${escapeHtml(a.name)}</h3><p>${escapeHtml(a.email)}</p><p class="text-secondary small">Programme: ${escapeHtml(prog ? (prog.programme || prog.title) : '—')}</p><div class="content-block mb-2" style="font-size:.85rem"><p class="mb-1">ID: ${fileLinkHtml(d.idCopy)}</p><p class="mb-1">Matric: ${fileLinkHtml(d.matric)}</p></div><textarea class="form-control form-control-sm mb-2" id="acc-notes-${a.id}" rows="2"></textarea><button class="btn btn-sm btn-primary me-2" data-acc-approve="${a.id}">Approve</button><button class="btn btn-sm btn-outline-light" data-acc-decline="${a.id}">Decline</button></div>`;
     });
   }
   if (pendingEnrol.length) {
@@ -436,7 +436,7 @@ function renderLearnerHome() {
   const s = getSession();
   const enrolments = getApprovedEnrolments(s.id);
   const courses = getCourses();
-  content().innerHTML = `<h2 class="page-title">My learning</h2><div class="content-block mb-3"><p class="mb-1"><strong>One programme at a time</strong></p><p class="text-secondary small mb-0">Apply for one programme → approval → Attend + modules.</p></div>${enrolments.length === 0 ? '<div class="empty">No active programme yet. Open Courses to apply for one.</div>' : enrolments.map((e) => { const c = courses.find((x) => x.id === e.courseId); return `<div class="list-card list-link" data-course="${e.courseId}" role="button"><h3>${escapeHtml(c?.title || '')}</h3><span class="badge-soft badge-ok">Active programme</span></div>`; }).join('')}<button class="btn btn-primary w-100 mt-3" id="btn-browse">Browse programmes</button><button class="btn btn-outline-light w-100 mt-2" id="btn-attend-home">Mark attendance</button>`;
+  content().innerHTML = `<h2 class="page-title">My learning</h2><div class="content-block mb-3"><p class="mb-1"><strong>One programme at a time</strong></p><p class="text-secondary small mb-0">Apply → approval → Attend + modules.</p></div>${enrolments.length === 0 ? '<div class="empty">No active programme yet. Open Courses to apply.</div>' : enrolments.map((e) => { const c = courses.find((x) => x.id === e.courseId); return `<div class="list-card list-link" data-course="${e.courseId}" role="button"><h3>${escapeHtml(c?.title || '')}</h3><span class="badge-soft badge-ok">Active programme</span></div>`; }).join('')}<button class="btn btn-primary w-100 mt-3" id="btn-browse">Browse programmes</button><button class="btn btn-outline-light w-100 mt-2" id="btn-attend-home">Mark attendance</button>`;
   document.getElementById('btn-browse')?.addEventListener('click', () => { renderCatalog(); setNavActive('catalog'); });
   document.getElementById('btn-attend-home')?.addEventListener('click', () => { renderAttendance(); setNavActive('attend'); });
   content().querySelectorAll('[data-course]').forEach((el) => {
