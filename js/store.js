@@ -150,8 +150,28 @@ function ensurePitchDemoData() {
       feedback: '',
       rubricScores: null,
       history: [],
+      attachments: {
+        knowledge: { name: 'mini-project-plan.pdf', type: 'application/pdf', size: 48200, dataUrl: null, tooLarge: false },
+        practical: { name: 'checklist-draft.docx', type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', size: 31800, dataUrl: null, tooLarge: false },
+      },
     });
     save(KEYS.submissions, subs, { silent: true });
+  }
+
+  // Fix demo / incomplete submissions missing attachments
+  {
+    const allSubs = load(KEYS.submissions, []);
+    let fixed = false;
+    allSubs.forEach((s) => {
+      if (!s.attachments) {
+        s.attachments = {
+          knowledge: { name: 'evidence-knowledge.pdf', type: 'application/pdf', size: 40000, dataUrl: null, tooLarge: false },
+          practical: { name: 'evidence-practical.pdf', type: 'application/pdf', size: 35000, dataUrl: null, tooLarge: false },
+        };
+        fixed = true;
+      }
+    });
+    if (fixed) save(KEYS.submissions, allSubs, { silent: true });
   }
 
   const enrolments = load(KEYS.enrolments, []);
@@ -207,7 +227,6 @@ export async function seedIfNeeded() {
       }
     });
     if (changed) save(KEYS.enrolments, enrolments, { silent: true });
-    // Migrate existing learners to approved status
     const users = load(KEYS.users, []);
     let uChanged = false;
     users.forEach((u) => {
