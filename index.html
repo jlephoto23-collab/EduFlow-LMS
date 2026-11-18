@@ -19,19 +19,19 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="EduFlow">
-  <meta name="description" content="EduFlow LMS — apply with documents, approvals, remote attendance">
+  <meta name="description" content="EduFlow — professional LMS for training providers. Applications, NQF programmes, assessments, attendance and results.">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon.svg">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css?v=20261118f">
+  <link rel="stylesheet" href="css/styles.css?v=20261118g">
 </head>
 <body>
   <div id="splash">
     <div class="splash-logo">E</div>
     <h1>EduFlow</h1>
-    <p>Learning Management System</p>
+    <p>Skills development · Enrol · Learn · Assess</p>
     <div class="spinner"></div>
   </div>
 
@@ -41,16 +41,17 @@
       <div class="login-brand">
         <div class="splash-logo sm">E</div>
         <h1>EduFlow</h1>
-        <p>Training provider LMS</p>
+        <p>Workplace learning &amp; skills programmes</p>
       </div>
 
-      <a class="live-demo-link" href="https://jlephoto23-collab.github.io/EduFlow-LMS/" target="_blank" rel="noopener">
-        <span class="live-dot">●</span> Live demo
-        <span class="live-demo-url">jlephoto23-collab.github.io/EduFlow-LMS</span>
-      </a>
-
-      <div id="auth-steps" class="d-flex justify-content-center gap-2 mb-3" style="font-size:.75rem;color:#94a3b8">
-        <span>1. Create account</span><span>→</span><span>2. Verify email</span><span>→</span><span>3. Apply</span><span>→</span><span>4. Get approved</span>
+      <div class="pitch-strip mb-3">
+        <div class="pitch-strip-title">Learner journey</div>
+        <div class="pitch-steps">
+          <span>1. Register</span><span class="sep">→</span>
+          <span>2. Verify</span><span class="sep">→</span>
+          <span>3. Apply</span><span class="sep">→</span>
+          <span>4. Learn</span>
+        </div>
       </div>
 
       <div id="login-panel">
@@ -66,10 +67,10 @@
         <p id="install-hint" class="text-secondary small text-center mt-2 mb-0">On phone: browser menu → <strong>Add to Home screen</strong></p>
         <p class="text-center mt-3 mb-0"><a href="#" id="btn-register" class="link-light" style="color:#93c5fd">New learner? Create account</a></p>
         <div class="demo-box demo-accounts mt-3">
-          <strong>Demo accounts</strong>
-          <div>Admin: admin@eduflow.test / admin123</div>
-          <div>Learner: learner1@gmail.com / learner123</div>
-          <div>Pending: thabo.apply@gmail.com / pending123</div>
+          <strong>Presentation logins</strong>
+          <div><span class="demo-role">Admin</span> admin@eduflow.test · admin123</div>
+          <div><span class="demo-role">Learner</span> learner1@gmail.com · learner123</div>
+          <div><span class="demo-role">Pending</span> thabo.apply@gmail.com · pending123</div>
         </div>
       </div>
 
@@ -153,7 +154,7 @@
   </div>
 
   <script type="module" src="js/email-config.js"></script>
-  <script type="module" src="js/app.js?v=20261118f"></script>
+  <script type="module" src="js/app.js?v=20261118g"></script>
   <script>
     setTimeout(function () {
       var s = document.getElementById('splash');
@@ -175,7 +176,7 @@
     });
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=20261118f').catch(() => {});
+        navigator.serviceWorker.register('./sw.js?v=20261118g').catch(() => {});
       });
     }
   </script>
