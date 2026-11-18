@@ -57,12 +57,13 @@ function renderCourseDetail(courseId) {
   const lessons = c.lessons || [];
   let doneCount = 0;
   lessons.forEach((l) => { if (getLessonStatus(courseId, l, learnerId).done) doneCount++; });
+  const savedDocs = (s && s.id) ? load('ef_docs_' + s.id + '_' + courseId, {}) : {};
   const docs = [
-    { id: 'ann', title: 'Announcements', icon: 'bi-megaphone', done: true },
-    { id: 'policy', title: 'Learner Policy Document', icon: 'bi-file-earmark-text', done: false },
-    { id: 'id', title: 'ID Copy', icon: 'bi-person-vcard', done: true },
-    { id: 'matric', title: 'Highest Secondary Education Certificate', icon: 'bi-award', done: true },
-    { id: 'cv', title: 'Curriculum Vitae', icon: 'bi-file-person', done: false },
+    { id: 'ann', title: 'Announcements', icon: 'bi-megaphone', done: !!savedDocs.ann || true },
+    { id: 'policy', title: 'Learner Policy Document', icon: 'bi-file-earmark-text', done: !!savedDocs.policy },
+    { id: 'id', title: 'ID Copy', icon: 'bi-person-vcard', done: !!savedDocs.id || true },
+    { id: 'matric', title: 'Highest Secondary Education Certificate', icon: 'bi-award', done: !!savedDocs.matric || true },
+    { id: 'cv', title: 'Curriculum Vitae', icon: 'bi-file-person', done: !!savedDocs.cv },
   ];
   const modules = [];
   let chunk = [];
@@ -76,7 +77,7 @@ function renderCourseDetail(courseId) {
   <div class="course-hero"><div class="course-hero-inner"><h1>${escapeHtml(c.programme || c.title)}</h1><p class="mb-0 small opacity-75">NQF ${c.nqfLevel} · ${c.credits} credits · SAQA ${escapeHtml(c.saqaId || '')}</p></div></div>
   <div class="apex-card mb-3">
     <h3 class="apex-section-title">Course documents</h3>
-    ${docs.map((d) => `<div class="activity-row"><div class="activity-left"><i class="bi ${d.icon}"></i><span>${escapeHtml(d.title)}</span></div><span class="status-pill ${d.done ? 'status-done' : 'status-todo'}">${d.done ? '✓ Done' : 'To do'}</span></div>`).join('')}
+    ${docs.map((d) => `<div class="activity-row clickable" data-doc="${d.id}" role="button"><div class="activity-left"><i class="bi ${d.icon}"></i><span>${escapeHtml(d.title)}</span></div><span class="status-pill ${d.done ? 'status-done' : 'status-todo'}">${d.done ? '✓ Done' : 'To do'}</span></div>`).join('')}
   </div>
   <div class="apex-card mb-3">
     <div class="d-flex justify-content-between align-items-center mb-2">
@@ -101,6 +102,44 @@ function renderCourseDetail(courseId) {
       const mi = Number(el.getAttribute('data-module'));
       renderModuleSection(courseId, modules[mi], mi);
     });
+  });
+  content().querySelectorAll('[data-doc]').forEach((el) => {
+    el.addEventListener('click', () => openCourseDocument(courseId, el.getAttribute('data-doc')));
+  });
+}
+
+function openCourseDocument(courseId, docId) {
+  const titles = {
+    ann: 'Announcements',
+    policy: 'Learner Policy Document',
+    id: 'ID Copy',
+    matric: 'Highest Secondary Education Certificate',
+    cv: 'Curriculum Vitae',
+  };
+  const bodies = {
+    ann: 'Welcome to your programme. Check this space for provider notices, class schedules and assessment dates.\n\nDemo announcement: Orientation session details will be posted here.',
+    policy: 'Learner Policy (demo summary)\n\n1. Attend scheduled sessions or mark remote attendance.\n2. Submit assessments by the due date.\n3. Upload original supporting documents only.\n4. Academic integrity is required.\n5. Contact the provider for support.\n\nTap Mark as Done after reading.',
+    id: 'Upload or view your ID / Smart ID on file.\n\nIn this pilot demo, ID was captured during application. Contact admin if you need to replace the file.',
+    matric: 'Highest secondary education certificate (Matric or equivalent) on file from your application.\n\nContact the training provider if this needs updating.',
+    cv: 'Curriculum Vitae\n\nUpload your latest CV so facilitators understand your workplace experience. (Demo: mark as done after reviewing.)',
+  };
+  const title = titles[docId] || 'Document';
+  const body = bodies[docId] || 'Document content.';
+  content().innerHTML = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-doc"><i class="bi bi-arrow-left"></i> Back</button>
+  <h2 class="page-title">${escapeHtml(title)}</h2>
+  <div class="content-block apex-doc">${formatBody(body)}</div>
+  <button class="btn btn-primary w-100 mt-2" id="btn-doc-done">Mark as Done</button>`;
+  document.getElementById('btn-back-doc')?.addEventListener('click', () => renderCourseDetail(courseId));
+  document.getElementById('btn-doc-done')?.addEventListener('click', () => {
+    const s = getSession();
+    if (s) {
+      const key = 'ef_docs_' + s.id + '_' + courseId;
+      const done = load(key, {});
+      done[docId] = true;
+      save(key, done);
+    }
+    alert('Marked as Done.');
+    renderCourseDetail(courseId);
   });
 }
 
@@ -217,7 +256,6 @@ function openAssignmentLesson(courseId, lesson, isTrainer) {
   }
   if (mine && mine.status === 'submitted') {
     content().innerHTML = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-lesson"><i class="bi bi-arrow-left"></i> Back</button>
-    <p class="text-secondary small">${escapeHtml(lesson.title)}</p>
     <h2 class="page-title">${escapeHtml(lesson.title)}</h2>
     <div class="status-chips mb-3"><span class="chip chip-ok">✓ Make a submission</span><span class="chip">Receive a grade</span><span class="chip">Receive a passing grade</span></div>
     <p class="text-secondary small mb-3">Opened: enrolment date<br>Due: end of programme</p>
@@ -323,7 +361,7 @@ function renderMessages() {
 }
 
 function renderAbout() {
-  content().innerHTML = `<h2 class="page-title">About EduFlow</h2><div class="content-block"><p class="mb-2"><strong>Rules</strong></p><ul class="text-secondary small mb-0"><li>One active programme per learner at a time</li><li>Apply with ID + Matric documents</li><li>Admin reviews documents then approves</li><li>Remote attendance register</li><li>Apex-style modules, Done/To do status, submission table</li></ul></div>`;
+  content().innerHTML = `<h2 class="page-title">About EduFlow</h2><div class="content-block"><p class="mb-2"><strong>Rules</strong></p><ul class="text-secondary small mb-0"><li>Create account → verify email → apply with documents</li><li>One active programme per learner at a time</li><li>Admin reviews documents then approves</li><li>Remote attendance register</li><li>Clickable modules, documents, quizzes and submissions</li></ul></div>`;
 }
 
 async function bootEduFlow() {
@@ -336,20 +374,55 @@ async function bootEduFlow() {
     const err = document.getElementById('login-error');
     if (!result.ok) { err.textContent = result.message; err.classList.remove('d-none'); return; }
     err.classList.add('d-none');
-    if (result.needsApplication) showApplicationStep(result.user);
+    if (result.needsVerify) showVerifyPanel(result.user);
+    else if (result.needsApplication) showApplicationStep(result.user);
     else if (result.pending) showAwaitingApproval();
     else showApp();
   });
   document.getElementById('btn-register')?.addEventListener('click', (e) => { e.preventDefault(); showRegisterPanel(); });
   document.getElementById('btn-show-login')?.addEventListener('click', (e) => { e.preventDefault(); logout(); });
   document.getElementById('btn-show-login-from-reg')?.addEventListener('click', (e) => { e.preventDefault(); showLogin(); });
-  document.getElementById('register-form')?.addEventListener('submit', (e) => {
+  document.getElementById('btn-show-login-from-verify')?.addEventListener('click', (e) => { e.preventDefault(); logout(); });
+  document.getElementById('register-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const err = document.getElementById('reg-error');
     err?.classList.add('d-none');
+    const btn = e.target.querySelector('button[type="submit"]');
+    if (btn) { btn.disabled = true; btn.textContent = 'Creating account…'; }
     const result = createLearnerAccount({ name: document.getElementById('reg-name')?.value.trim() || '', email: document.getElementById('reg-email')?.value.trim() || '', phone: document.getElementById('reg-phone')?.value.trim() || '', password: document.getElementById('reg-password')?.value || '', password2: document.getElementById('reg-password2')?.value || '' });
-    if (!result.ok) { if (err) { err.textContent = result.message; err.classList.remove('d-none'); } else alert(result.message); return; }
+    if (!result.ok) {
+      if (err) { err.textContent = result.message; err.classList.remove('d-none'); }
+      if (btn) { btn.disabled = false; btn.textContent = 'Create account & continue'; }
+      return;
+    }
+    await sendWelcomeEmail({ to: result.user.email, name: result.user.name, code: result.code });
+    if (btn) { btn.disabled = false; btn.textContent = 'Create account & continue'; }
+    showVerifyPanel(result.user);
+  });
+  document.getElementById('verify-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const err = document.getElementById('verify-error');
+    err?.classList.add('d-none');
+    const s = getSession();
+    if (!s) { showLogin(); return; }
+    const code = document.getElementById('verify-code')?.value.trim() || '';
+    const result = verifyLearnerEmail(s.id, code);
+    if (!result.ok) { if (err) { err.textContent = result.message; err.classList.remove('d-none'); } return; }
     showApplicationStep(result.user);
+  });
+  document.getElementById('btn-resend-code')?.addEventListener('click', async (e) => {
+    e.preventDefault();
+    const s = getSession();
+    if (!s) return;
+    const users = load(KEYS.users, []);
+    const user = users.find((u) => u.id === s.id);
+    if (!user) return;
+    user.verifyCode = generateVerifyCode();
+    save(KEYS.users, users);
+    setSession(user);
+    await sendWelcomeEmail({ to: user.email, name: user.name, code: user.verifyCode });
+    showVerifyPanel(user);
+    alert('A new code was prepared for ' + user.email + (getEmailConfig()?.publicKey ? '.' : ' (shown in the demo inbox below).'));
   });
   document.getElementById('apply-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
