@@ -46,6 +46,45 @@ function pushMessage(toUserId, toEmail, subject, body) {
   messages.unshift({ id: uid(), toUserId, toEmail, subject, body, at: new Date().toISOString(), read: false });
   save(KEYS.messages, messages);
 }
+function getEmailConfig() {
+  try { return load('ef_email_config', null) || (typeof EMAIL_CONFIG !== 'undefined' ? EMAIL_CONFIG : null); } catch { return null; }
+}
+function generateVerifyCode() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+async function sendWelcomeEmail({ to, name, code }) {
+  const cfg = getEmailConfig();
+  const subject = 'Welcome to EduFlow — verify your email';
+  const body =
+    'Hi ' + (name || 'Learner') + ',\n\n' +
+    'Welcome to EduFlow LMS.\n\n' +
+    'Your verification code is: ' + code + '\n\n' +
+    'Enter this code in the app to verify your email and continue with your application.\n\n' +
+    'If you did not create an account, you can ignore this message.\n\n' +
+    '— EduFlow Training Provider';
+  const outbox = load('ef_outbox', []);
+  outbox.unshift({ id: uid(), to, subject, body, at: new Date().toISOString(), type: 'welcome_verify' });
+  save('ef_outbox', outbox, { silent: true });
+  if (cfg && cfg.serviceId && cfg.templateId && cfg.publicKey) {
+    try {
+      const res = await fetch('https://api.emailjs.com/api/v1.0/email/public', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          service_id: cfg.serviceId,
+          template_id: cfg.templateId,
+          user_id: cfg.publicKey,
+          template_params: { to_email: to, to_name: name || 'Learner', subject, message: body, verification_code: code },
+        }),
+      });
+      if (res.ok) return { ok: true, mode: 'emailjs' };
+      return { ok: true, mode: 'local', warning: 'Email service error — code shown in app.' };
+    } catch (e) {
+      return { ok: true, mode: 'local', warning: 'Could not reach email service — code shown in app.' };
+    }
+  }
+  return { ok: true, mode: 'local' };
+}
 function getCourses() { return load(KEYS.courses, []); }
 function getCourse(id) { return getCourses().find((c) => c.id === id); }
 function getEnrolments() { return load(KEYS.enrolments, []); }
@@ -98,6 +137,7 @@ function login(email, password) {
   const users = load(KEYS.users, []);
   const user = users.find((u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
   if (!user) return { ok: false, message: 'Invalid email or password' };
+  if (user.role === 'learner' && user.status === 'unverified') { setSession(user); return { ok: true, user, needsVerify: true }; }
   if (user.role === 'learner' && user.status === 'registered') { setSession(user); return { ok: true, user, needsApplication: true }; }
   if (user.role === 'learner' && (user.status || 'approved') === 'pending') { setSession(user); return { ok: true, user, pending: true }; }
   if (user.role === 'learner' && user.status === 'rejected') return { ok: false, message: 'Your application was not approved. Contact the training provider.' };
@@ -113,10 +153,29 @@ function createLearnerAccount(p) {
   if ((p.password || '').length < 6) return { ok: false, message: 'Password must be at least 6 characters' };
   if (p.password !== p.password2) return { ok: false, message: 'Passwords do not match' };
   if (users.some((u) => u.email.toLowerCase() === em)) return { ok: false, message: 'Email already registered — sign in instead' };
-  const user = { id: uid(), name, email: em, password: p.password, role: 'learner', gmail: em, phone: (p.phone || '').trim(), status: 'registered', preferredProgrammeId: null, createdAt: new Date().toISOString() };
+  const code = generateVerifyCode();
+  const user = {
+    id: uid(), name, email: em, password: p.password, role: 'learner', gmail: em,
+    phone: (p.phone || '').trim(), status: 'unverified', preferredProgrammeId: null,
+    createdAt: new Date().toISOString(), verifyCode: code, emailVerified: false,
+  };
   users.push(user);
   save(KEYS.users, users);
-  pushMessage(user.id, em, 'Account created — complete your application', 'Welcome. Complete the application so an administrator can approve your access.');
+  pushMessage(user.id, em, 'Welcome — verify your email', 'Your verification code was sent to ' + em + '. Enter it in the app to continue.');
+  setSession(user);
+  return { ok: true, user, needsVerify: true, code };
+}
+function verifyLearnerEmail(userId, code) {
+  const users = load(KEYS.users, []);
+  const user = users.find((u) => u.id === userId);
+  if (!user) return { ok: false, message: 'Account not found. Please sign in again.' };
+  if (String(code || '').trim() !== String(user.verifyCode || '')) return { ok: false, message: 'Incorrect verification code.' };
+  user.emailVerified = true;
+  user.status = 'registered';
+  user.verifiedAt = new Date().toISOString();
+  delete user.verifyCode;
+  save(KEYS.users, users);
+  pushMessage(user.id, user.gmail || user.email, 'Email verified', 'Your email is verified. Complete your application to request access.');
   setSession(user);
   return { ok: true, user, needsApplication: true };
 }
@@ -163,7 +222,22 @@ function approveAccountApplication(appId, approve, reviewNotes) {
 }
 function logout() { setSession(null); showLogin(); }
 function hideAllAuthPanels() {
-  ['login-panel','register-panel','apply-panel'].forEach((id) => document.getElementById(id)?.classList.add('d-none'));
+  ['login-panel','register-panel','apply-panel','verify-panel'].forEach((id) => document.getElementById(id)?.classList.add('d-none'));
+}
+function showVerifyPanel(user) {
+  document.getElementById('login-view').classList.remove('d-none');
+  document.getElementById('app-view').classList.add('d-none');
+  hideAllAuthPanels();
+  document.getElementById('verify-panel')?.classList.remove('d-none');
+  const emailEl = document.getElementById('verify-email-label');
+  if (emailEl) emailEl.textContent = user?.email || '';
+  const demo = document.getElementById('verify-demo-code');
+  if (demo && user?.verifyCode) {
+    demo.classList.remove('d-none');
+    demo.innerHTML = '<strong>Demo inbox</strong><br>To: ' + escapeHtml(user.email) + '<br>Code: <code style="font-size:1.1rem">' + escapeHtml(user.verifyCode) + '</code>';
+  }
+  const err = document.getElementById('verify-error');
+  if (err) err.classList.add('d-none');
 }
 function showLogin() {
   document.getElementById('login-view').classList.remove('d-none');
@@ -197,7 +271,7 @@ function showAwaitingApproval() {
   const s = getSession();
   document.getElementById('user-chip').textContent = s ? `${s.name} · pending` : '';
   if (bottomNav()) bottomNav().innerHTML = '';
-  content().innerHTML = `<div class="content-block text-center" style="margin-top:2rem"><div class="splash-logo sm" style="margin:0 auto 1rem">E</div><h2 class="page-title">Step 3 — Waiting for approval</h2><p class="text-secondary">Hi ${escapeHtml(s?.name || '')}. Application received.</p><p class="mb-3"><span class="badge-soft badge-warn">Status: Pending approval</span></p><button type="button" class="btn btn-outline-light w-100 mt-3" id="btn-pending-logout">Sign out</button><button type="button" class="btn btn-primary w-100 mt-2" id="btn-pending-refresh">Check status</button></div>`;
+  content().innerHTML = `<div class="content-block text-center" style="margin-top:2rem"><div class="splash-logo sm" style="margin:0 auto 1rem">E</div><h2 class="page-title">Waiting for approval</h2><p class="text-secondary">Hi ${escapeHtml(s?.name || '')}. Application received.</p><p class="mb-3"><span class="badge-soft badge-warn">Status: Pending approval</span></p><button type="button" class="btn btn-outline-light w-100 mt-3" id="btn-pending-logout">Sign out</button><button type="button" class="btn btn-primary w-100 mt-2" id="btn-pending-refresh">Check status</button></div>`;
   document.getElementById('btn-pending-logout')?.addEventListener('click', logout);
   document.getElementById('btn-pending-refresh')?.addEventListener('click', () => {
     const u = load(KEYS.users, []).find((x) => x.id === s.id);
@@ -239,6 +313,7 @@ function showApp() {
   if (s && s.role === 'learner') {
     const u = load(KEYS.users, []).find((x) => x.id === s.id);
     const st = (u && u.status) || 'approved';
+    if (st === 'unverified') { document.getElementById('app-view').classList.add('d-none'); showVerifyPanel(u); return; }
     if (st === 'registered') { document.getElementById('app-view').classList.add('d-none'); showApplicationStep(u); return; }
     if (st === 'pending') { showAwaitingApproval(); return; }
     if (st === 'rejected') { alert('Your application was not approved.'); logout(); return; }
@@ -260,7 +335,7 @@ function renderTrainerHome() {
   const pendingAccounts = load(KEYS.applications, []).filter((a) => a.status === 'pending').length;
   const pending = pendingEnrol + pendingAccounts;
   const toGrade = getSubmissions().filter((s) => s.status === 'submitted').length;
-  const learners = load(KEYS.users, []).filter((u) => u.role === 'learner' && !['pending','registered'].includes(u.status || 'approved'));
+  const learners = load(KEYS.users, []).filter((u) => u.role === 'learner' && !['pending','registered','unverified'].includes(u.status || 'approved'));
   const attendCount = getAttendance().filter((a) => a.date === todayISODate()).length;
   content().innerHTML = `<h2 class="page-title">Administrator dashboard</h2><p class="text-secondary small mb-3">One programme per learner at a time</p><div class="card-grid mb-3"><div class="stat-card stat-link" data-dash="programmes" role="button"><div class="label">Programmes</div><div class="value">${courses.length}</div></div><div class="stat-card stat-link" data-dash="learners" role="button"><div class="label">Learners</div><div class="value">${learners.length}</div></div><div class="stat-card stat-link" data-dash="pending" role="button"><div class="label">Pending access</div><div class="value">${pending}</div></div><div class="stat-card stat-link" data-dash="grade" role="button"><div class="label">To grade</div><div class="value">${toGrade}</div></div></div>${pending ? `<div class="list-card list-link" style="border-color:#eab308" data-dash="pending" role="button"><h3>Applications</h3><p>${pendingAccounts} account · ${pendingEnrol} course</p></div>` : ''}<div class="list-card list-link mt-2" data-dash="attend" role="button"><h3>Attendance register</h3><p class="mb-0">${attendCount} marked present today</p></div>`;
   content().querySelectorAll('[data-dash]').forEach((el) => {
@@ -282,7 +357,7 @@ function renderLearners() {
     const active = getApprovedEnrolments(u.id);
     const enr = active[0];
     const prog = enr ? courses.find((c) => c.id === enr.courseId) : null;
-    return `<div class="list-card"><h3>${escapeHtml(u.name)}</h3><p class="text-secondary small">${escapeHtml(u.email)}</p><span class="badge-soft ${st==='pending'||st==='registered'?'badge-warn':st==='approved'?'badge-ok':''}">${st}</span>${prog ? `<p class="text-secondary small mt-1">Active: ${escapeHtml(prog.title)}</p><button class="btn btn-sm btn-outline-light mt-1" data-complete="${enr.id}">Mark programme complete</button>` : '<p class="text-secondary small mt-1 mb-0">No active programme</p>'}</div>`;
+    return `<div class="list-card"><h3>${escapeHtml(u.name)}</h3><p class="text-secondary small">${escapeHtml(u.email)}</p><span class="badge-soft ${st==='pending'||st==='registered'||st==='unverified'?'badge-warn':st==='approved'?'badge-ok':''}">${st}</span>${prog ? `<p class="text-secondary small mt-1">Active: ${escapeHtml(prog.title)}</p><button class="btn btn-sm btn-outline-light mt-1" data-complete="${enr.id}">Mark programme complete</button>` : '<p class="text-secondary small mt-1 mb-0">No active programme</p>'}</div>`;
   }).join('');
   content().querySelectorAll('[data-complete]').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -361,7 +436,7 @@ function renderLearnerHome() {
   const s = getSession();
   const enrolments = getApprovedEnrolments(s.id);
   const courses = getCourses();
-  content().innerHTML = `<h2 class="page-title">My learning</h2><div class="content-block mb-3"><p class="mb-1"><strong>One programme at a time</strong></p><p class="text-secondary small mb-0">Apply for one programme → approval → Attend + modules. Finish before starting another.</p></div>${enrolments.length === 0 ? '<div class="empty">No active programme yet. Open Courses to apply for one.</div>' : enrolments.map((e) => { const c = courses.find((x) => x.id === e.courseId); return `<div class="list-card list-link" data-course="${e.courseId}" role="button"><h3>${escapeHtml(c?.title || '')}</h3><span class="badge-soft badge-ok">Active programme</span></div>`; }).join('')}<button class="btn btn-primary w-100 mt-3" id="btn-browse">Browse programmes</button><button class="btn btn-outline-light w-100 mt-2" id="btn-attend-home">Mark attendance</button>`;
+  content().innerHTML = `<h2 class="page-title">My learning</h2><div class="content-block mb-3"><p class="mb-1"><strong>One programme at a time</strong></p><p class="text-secondary small mb-0">Apply for one programme → approval → Attend + modules.</p></div>${enrolments.length === 0 ? '<div class="empty">No active programme yet. Open Courses to apply for one.</div>' : enrolments.map((e) => { const c = courses.find((x) => x.id === e.courseId); return `<div class="list-card list-link" data-course="${e.courseId}" role="button"><h3>${escapeHtml(c?.title || '')}</h3><span class="badge-soft badge-ok">Active programme</span></div>`; }).join('')}<button class="btn btn-primary w-100 mt-3" id="btn-browse">Browse programmes</button><button class="btn btn-outline-light w-100 mt-2" id="btn-attend-home">Mark attendance</button>`;
   document.getElementById('btn-browse')?.addEventListener('click', () => { renderCatalog(); setNavActive('catalog'); });
   document.getElementById('btn-attend-home')?.addEventListener('click', () => { renderAttendance(); setNavActive('attend'); });
   content().querySelectorAll('[data-course]').forEach((el) => {
