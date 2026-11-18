@@ -1,7 +1,6 @@
 /**
  * EduFlow data store — NQF-aligned pilot programmes.
- * SAQA IDs/titles are public register references only.
- * Learning outcomes are original pilot wording — not official SAQA unit-standard text.
+ * Mid-level LMS: payments, Zoom sessions, certificates, roles.
  */
 
 import { isFirebaseEnabled } from './firebase-config.js';
@@ -73,34 +72,14 @@ export function uid() {
   return 'id_' + Math.random().toString(36).slice(2, 11);
 }
 
-function ensurePitchDemoData() {
-  if (!load(KEYS.users, null)) return;
-
-  const settings = load('ef_settings', null);
-  if (!settings) {
-    save(
-      'ef_settings',
-      {
-        providerName: 'EduFlow Training Provider',
-        contactEmail: 'admin@eduflow.test',
-        supportPhone: '+27 00 000 0000',
-        welcomeMessage:
-          'Welcome to your learning programme. Complete guides, modules and assessments to progress. Results and notices are linked to your Gmail.',
-        passMarkDefault: 70,
-        certificateFooter:
-          'This is a demo certificate for pilot modules only — not an official SETA statement of results.',
-      },
-      { silent: true }
-    );
-  }
-
-  if (!load(KEYS.attendance, null)) save(KEYS.attendance, [], { silent: true });
+function applyMidLevelData() {
   if (!load(KEYS.sessions, null)) save(KEYS.sessions, [], { silent: true });
   if (!load(KEYS.certificates, null)) save(KEYS.certificates, [], { silent: true });
   if (!load(KEYS.payments, null)) save(KEYS.payments, [], { silent: true });
+  if (!load(KEYS.attendance, null)) save(KEYS.attendance, [], { silent: true });
 
   const users = load(KEYS.users, []);
-  if (!users.some((u) => u.id === 'u_fac')) {
+  if (users.length && !users.some((u) => u.id === 'u_fac' || u.email === 'facilitator@eduflow.test')) {
     users.push({
       id: 'u_fac',
       name: 'Facilitator Dlamini',
@@ -151,12 +130,34 @@ function ensurePitchDemoData() {
     });
     save(KEYS.sessions, sessions, { silent: true });
   }
+}
+
+function ensurePitchDemoData() {
+  if (!load(KEYS.users, null)) return;
+
+  applyMidLevelData();
+
+  const settings = load('ef_settings', null);
+  if (!settings) {
+    save(
+      'ef_settings',
+      {
+        providerName: 'EduFlow Training Provider',
+        contactEmail: 'admin@eduflow.test',
+        supportPhone: '+27 00 000 0000',
+        welcomeMessage: 'Welcome to your learning programme.',
+        passMarkDefault: 70,
+        certificateFooter: 'Pilot certificate — not an official SETA statement of results.',
+      },
+      { silent: true }
+    );
+  }
 
   const apps = load(KEYS.applications, []);
   if (!apps.some((a) => a.status === 'pending')) {
-    const users2 = load(KEYS.users, []);
-    if (!users2.some((u) => u.id === 'u_pending')) {
-      users2.push({
+    const users = load(KEYS.users, []);
+    if (!users.some((u) => u.id === 'u_pending')) {
+      users.push({
         id: 'u_pending',
         name: 'Thabo Applicant',
         email: 'thabo.apply@gmail.com',
@@ -167,7 +168,7 @@ function ensurePitchDemoData() {
         preferredProgrammeId: 'c_pm4',
         appliedAt: new Date().toISOString(),
       });
-      save(KEYS.users, users2, { silent: true });
+      save(KEYS.users, users, { silent: true });
     }
     apps.push({
       id: 'app_demo1',
@@ -195,9 +196,7 @@ function ensurePitchDemoData() {
       assignmentId: 'asg_pm1',
       courseId: 'c_pm4',
       learnerId: 'u_l1',
-      text:
-        'Goal: Roll out a simple inventory checklist for the workshop store within 4 weeks.\n' +
-        'Tasks: (1) List stock categories (2) Draft checklist template (3) Pilot with two staff (4) Collect feedback (5) Finalise and train team.',
+      text: 'Goal: Roll out a simple inventory checklist for the workshop store within 4 weeks.',
       status: 'submitted',
       submittedAt: new Date().toISOString(),
       score: null,
@@ -213,68 +212,24 @@ function ensurePitchDemoData() {
 
 export async function seedIfNeeded() {
   const ver = load('ef_seed_ver', 0);
+  const hasUsers = !!load(KEYS.users, null);
 
-  if (ver >= 9 && ver < 10 && load(KEYS.users, null)) {
-    if (!load(KEYS.sessions, null)) save(KEYS.sessions, [], { silent: true });
-    if (!load(KEYS.certificates, null)) save(KEYS.certificates, [], { silent: true });
-    if (!load(KEYS.payments, null)) save(KEYS.payments, [], { silent: true });
-    const courses = load(KEYS.courses, []);
-    let cChanged = false;
-    courses.forEach((c) => {
-      if (c.feeZAR == null) {
-        c.feeZAR = c.id === 'c_pm4' ? 4500 : c.id === 'c_gm4' ? 4200 : 4000;
-        cChanged = true;
-      }
-    });
-    if (cChanged) save(KEYS.courses, courses, { silent: true });
-    const enrolments = load(KEYS.enrolments, []);
-    let eChanged = false;
-    enrolments.forEach((e) => {
-      if (!e.paymentStatus) {
-        e.paymentStatus = e.status === 'approved' ? 'paid' : 'unpaid';
-        eChanged = true;
-      }
-    });
-    if (eChanged) save(KEYS.enrolments, enrolments, { silent: true });
-    const sessions = load(KEYS.sessions, []);
-    if (!sessions.length) {
-      const start = new Date();
-      start.setDate(start.getDate() + 2);
-      start.setHours(10, 0, 0, 0);
-      sessions.push({
-        id: 'sess_demo1',
-        courseId: 'c_pm4',
-        title: 'Project kick-off (virtual class)',
-        startsAt: start.toISOString(),
-        durationMin: 90,
-        zoomUrl: 'https://zoom.us/j/83019475621?pwd=EduFlowDemo',
-        zoomMeetingId: '830 1947 5621',
-        hostName: 'Admin Trainer',
-        createdAt: new Date().toISOString(),
-      });
-      save(KEYS.sessions, sessions, { silent: true });
+  // Existing installs: apply mid-level LMS data automatically
+  if (hasUsers) {
+    if (ver < 10) {
+      applyMidLevelData();
+      save('ef_seed_ver', 10, { silent: true });
     }
-    save('ef_seed_ver', 10, { silent: true });
     ensurePitchDemoData();
     return;
   }
 
-  if (ver >= 10 && load(KEYS.users, null)) {
-    ensurePitchDemoData();
-    return;
-  }
-
-  if (ver >= 6 && ver < 9 && load(KEYS.users, null)) {
-    if (!load(KEYS.attendance, null)) save(KEYS.attendance, [], { silent: true });
-    save('ef_seed_ver', 9, { silent: true });
-    ensurePitchDemoData();
-    return;
-  }
-
+  // Fresh install
   Object.values(KEYS).forEach((k) => localStorage.removeItem(k));
   localStorage.removeItem('ef_settings');
 
   const { runFullSeed } = await import('./seed-data.js');
   runFullSeed(save, KEYS);
+  applyMidLevelData();
   save('ef_seed_ver', 10, { silent: true });
 }
