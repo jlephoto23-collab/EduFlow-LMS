@@ -18,6 +18,9 @@ export const KEYS = {
   applications: 'ef_applications',
   messages: 'ef_messages',
   attendance: 'ef_attendance',
+  sessions: 'ef_sessions',
+  certificates: 'ef_certificates',
+  payments: 'ef_payments',
 };
 
 const CHANNEL_NAME = 'eduflow-live';
@@ -91,15 +94,69 @@ function ensurePitchDemoData() {
     );
   }
 
-  if (!load(KEYS.attendance, null)) {
-    save(KEYS.attendance, [], { silent: true });
+  if (!load(KEYS.attendance, null)) save(KEYS.attendance, [], { silent: true });
+  if (!load(KEYS.sessions, null)) save(KEYS.sessions, [], { silent: true });
+  if (!load(KEYS.certificates, null)) save(KEYS.certificates, [], { silent: true });
+  if (!load(KEYS.payments, null)) save(KEYS.payments, [], { silent: true });
+
+  const users = load(KEYS.users, []);
+  if (!users.some((u) => u.id === 'u_fac')) {
+    users.push({
+      id: 'u_fac',
+      name: 'Facilitator Dlamini',
+      email: 'facilitator@eduflow.test',
+      password: 'facil123',
+      role: 'facilitator',
+      gmail: 'facilitator@eduflow.test',
+      status: 'approved',
+    });
+    save(KEYS.users, users, { silent: true });
+  }
+
+  const courses = load(KEYS.courses, []);
+  let cChanged = false;
+  courses.forEach((c) => {
+    if (c.feeZAR == null) {
+      c.feeZAR = c.id === 'c_pm4' ? 4500 : c.id === 'c_gm4' ? 4200 : 4000;
+      cChanged = true;
+    }
+  });
+  if (cChanged) save(KEYS.courses, courses, { silent: true });
+
+  const enrolments = load(KEYS.enrolments, []);
+  let eChanged = false;
+  enrolments.forEach((e) => {
+    if (!e.paymentStatus) {
+      e.paymentStatus = e.status === 'approved' ? 'paid' : 'unpaid';
+      eChanged = true;
+    }
+  });
+  if (eChanged) save(KEYS.enrolments, enrolments, { silent: true });
+
+  const sessions = load(KEYS.sessions, []);
+  if (!sessions.length) {
+    const start = new Date();
+    start.setDate(start.getDate() + 2);
+    start.setHours(10, 0, 0, 0);
+    sessions.push({
+      id: 'sess_demo1',
+      courseId: 'c_pm4',
+      title: 'Project kick-off (virtual class)',
+      startsAt: start.toISOString(),
+      durationMin: 90,
+      zoomUrl: 'https://zoom.us/j/83019475621?pwd=EduFlowDemo',
+      zoomMeetingId: '830 1947 5621',
+      hostName: 'Admin Trainer',
+      createdAt: new Date().toISOString(),
+    });
+    save(KEYS.sessions, sessions, { silent: true });
   }
 
   const apps = load(KEYS.applications, []);
   if (!apps.some((a) => a.status === 'pending')) {
-    const users = load(KEYS.users, []);
-    if (!users.some((u) => u.id === 'u_pending')) {
-      users.push({
+    const users2 = load(KEYS.users, []);
+    if (!users2.some((u) => u.id === 'u_pending')) {
+      users2.push({
         id: 'u_pending',
         name: 'Thabo Applicant',
         email: 'thabo.apply@gmail.com',
@@ -110,7 +167,7 @@ function ensurePitchDemoData() {
         preferredProgrammeId: 'c_pm4',
         appliedAt: new Date().toISOString(),
       });
-      save(KEYS.users, users, { silent: true });
+      save(KEYS.users, users2, { silent: true });
     }
     apps.push({
       id: 'app_demo1',
@@ -132,8 +189,7 @@ function ensurePitchDemoData() {
   }
 
   const subs = load(KEYS.submissions, []);
-  const hasOpenSubmission = subs.some((s) => s.status === 'submitted');
-  if (!hasOpenSubmission) {
+  if (!subs.some((s) => s.status === 'submitted')) {
     subs.push({
       id: 'sub_demo1',
       assignmentId: 'asg_pm1',
@@ -141,15 +197,11 @@ function ensurePitchDemoData() {
       learnerId: 'u_l1',
       text:
         'Goal: Roll out a simple inventory checklist for the workshop store within 4 weeks.\n' +
-        'Tasks: (1) List stock categories (2) Draft checklist template (3) Pilot with two staff (4) Collect feedback (5) Finalise and train team.\n' +
-        'Owners: Store supervisor + admin assistant.\n' +
-        'Risk: Staff skip the form under pressure — mitigation: 5-minute toolbox talk and supervisor sign-off.',
+        'Tasks: (1) List stock categories (2) Draft checklist template (3) Pilot with two staff (4) Collect feedback (5) Finalise and train team.',
       status: 'submitted',
       submittedAt: new Date().toISOString(),
       score: null,
       feedback: '',
-      rubricScores: null,
-      history: [],
       attachments: {
         knowledge: { name: 'mini-project-plan.pdf', type: 'application/pdf', size: 48200, dataUrl: null, tooLarge: false },
         practical: { name: 'checklist-draft.docx', type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', size: 31800, dataUrl: null, tooLarge: false },
@@ -157,85 +209,63 @@ function ensurePitchDemoData() {
     });
     save(KEYS.submissions, subs, { silent: true });
   }
-
-  // Fix demo / incomplete submissions missing attachments
-  {
-    const allSubs = load(KEYS.submissions, []);
-    let fixed = false;
-    allSubs.forEach((s) => {
-      if (!s.attachments) {
-        s.attachments = {
-          knowledge: { name: 'evidence-knowledge.pdf', type: 'application/pdf', size: 40000, dataUrl: null, tooLarge: false },
-          practical: { name: 'evidence-practical.pdf', type: 'application/pdf', size: 35000, dataUrl: null, tooLarge: false },
-        };
-        fixed = true;
-      }
-    });
-    if (fixed) save(KEYS.submissions, allSubs, { silent: true });
-  }
-
-  const enrolments = load(KEYS.enrolments, []);
-  if (!enrolments.some((e) => e.status === 'pending')) {
-    const existsLearnerCourse = enrolments.some(
-      (e) => e.learnerId === 'u_l2' && e.courseId === 'c_gm4'
-    );
-    if (!existsLearnerCourse) {
-      enrolments.push({
-        id: 'e_pending_pitch',
-        courseId: 'c_gm4',
-        learnerId: 'u_l2',
-        status: 'pending',
-        enrolledAt: new Date().toISOString(),
-        documents: {
-          hasDisability: false,
-          idCopy: { name: 'james-id.pdf', type: 'application/pdf', size: 110000, dataUrl: null, tooLarge: false },
-          matric: { name: 'james-matric.pdf', type: 'application/pdf', size: 180000, dataUrl: null, tooLarge: false },
-          otherCerts: [{ name: 'first-aid.pdf', type: 'application/pdf', size: 90000, dataUrl: null, tooLarge: false }],
-          disabilityNote: null,
-        },
-        meetsMinimum: true,
-        requirementIssues: [],
-        reviewNotes: '',
-      });
-      save(KEYS.enrolments, enrolments, { silent: true });
-    }
-  }
 }
 
 export async function seedIfNeeded() {
   const ver = load('ef_seed_ver', 0);
-  if (ver >= 9 && load(KEYS.users, null)) {
+
+  if (ver >= 9 && ver < 10 && load(KEYS.users, null)) {
+    if (!load(KEYS.sessions, null)) save(KEYS.sessions, [], { silent: true });
+    if (!load(KEYS.certificates, null)) save(KEYS.certificates, [], { silent: true });
+    if (!load(KEYS.payments, null)) save(KEYS.payments, [], { silent: true });
+    const courses = load(KEYS.courses, []);
+    let cChanged = false;
+    courses.forEach((c) => {
+      if (c.feeZAR == null) {
+        c.feeZAR = c.id === 'c_pm4' ? 4500 : c.id === 'c_gm4' ? 4200 : 4000;
+        cChanged = true;
+      }
+    });
+    if (cChanged) save(KEYS.courses, courses, { silent: true });
+    const enrolments = load(KEYS.enrolments, []);
+    let eChanged = false;
+    enrolments.forEach((e) => {
+      if (!e.paymentStatus) {
+        e.paymentStatus = e.status === 'approved' ? 'paid' : 'unpaid';
+        eChanged = true;
+      }
+    });
+    if (eChanged) save(KEYS.enrolments, enrolments, { silent: true });
+    const sessions = load(KEYS.sessions, []);
+    if (!sessions.length) {
+      const start = new Date();
+      start.setDate(start.getDate() + 2);
+      start.setHours(10, 0, 0, 0);
+      sessions.push({
+        id: 'sess_demo1',
+        courseId: 'c_pm4',
+        title: 'Project kick-off (virtual class)',
+        startsAt: start.toISOString(),
+        durationMin: 90,
+        zoomUrl: 'https://zoom.us/j/83019475621?pwd=EduFlowDemo',
+        zoomMeetingId: '830 1947 5621',
+        hostName: 'Admin Trainer',
+        createdAt: new Date().toISOString(),
+      });
+      save(KEYS.sessions, sessions, { silent: true });
+    }
+    save('ef_seed_ver', 10, { silent: true });
+    ensurePitchDemoData();
+    return;
+  }
+
+  if (ver >= 10 && load(KEYS.users, null)) {
     ensurePitchDemoData();
     return;
   }
 
   if (ver >= 6 && ver < 9 && load(KEYS.users, null)) {
     if (!load(KEYS.attendance, null)) save(KEYS.attendance, [], { silent: true });
-    const enrolments = load(KEYS.enrolments, []);
-    let changed = false;
-    enrolments.forEach((e) => {
-      if (!e.documents) {
-        e.documents = {
-          hasDisability: false,
-          idCopy: { name: 'id-on-file.pdf', type: 'application/pdf', size: 100000, dataUrl: null, tooLarge: false },
-          matric: { name: 'matric-on-file.pdf', type: 'application/pdf', size: 100000, dataUrl: null, tooLarge: false },
-          otherCerts: [],
-          disabilityNote: null,
-        };
-        e.meetsMinimum = true;
-        changed = true;
-      }
-    });
-    if (changed) save(KEYS.enrolments, enrolments, { silent: true });
-    const users = load(KEYS.users, []);
-    let uChanged = false;
-    users.forEach((u) => {
-      if (!u.status) {
-        u.status = u.role === 'trainer' ? 'approved' : 'approved';
-        uChanged = true;
-      }
-    });
-    if (uChanged) save(KEYS.users, users, { silent: true });
     save('ef_seed_ver', 9, { silent: true });
     ensurePitchDemoData();
     return;
@@ -246,4 +276,5 @@ export async function seedIfNeeded() {
 
   const { runFullSeed } = await import('./seed-data.js');
   runFullSeed(save, KEYS);
+  save('ef_seed_ver', 10, { silent: true });
 }
