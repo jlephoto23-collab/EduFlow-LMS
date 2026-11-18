@@ -3,6 +3,9 @@ function renderCatalog() {
   const courses = getCourses();
   const enrolments = getEnrolments();
   content().innerHTML = `<h2 class="page-title">${s.role === 'trainer' ? 'Programmes' : 'Course catalogue'}</h2><p class="text-secondary mb-3">Learners may only have <strong>one active programme</strong> at a time.</p>` +
+    courses.map = getCourses();
+  const enrolments = getEnrolments();
+  content().innerHTML = `<h2 class="page-title">${s.role === 'trainer' ? 'Programmes' : 'Course catalogue'}</h2><p class="text-secondary mb-3">Learners may only have <strong>one active programme</strong> at a time.</p>` +
     courses.map((c) => {
       const enr = enrolments.find((e) => e.learnerId === s.id && e.courseId === c.id);
       const status = enr ? enr.status : null;
@@ -24,15 +27,105 @@ function renderCatalog() {
     });
   });
 }
+
+function getLessonStatus(courseId, lesson, learnerId) {
+  if (!learnerId) return { label: 'View', cls: '', done: false };
+  if (lesson.type === 'guide' || lesson.type === 'content') {
+    const prog = load(KEYS.progress, []).find((p) => p.learnerId === learnerId && p.courseId === courseId);
+    const done = !!(prog && (prog.completedLessonIds || []).includes(lesson.id));
+    return done ? { label: 'Done', cls: 'status-done', done: true } : { label: 'To do', cls: 'status-todo', done: false };
+  }
+  if (lesson.type === 'quiz') {
+    const attempts = load(KEYS.attempts, []).filter((a) => a.learnerId === learnerId && a.lessonId === lesson.id);
+    if (!attempts.length) return { label: 'To do', cls: 'status-todo', done: false };
+    const best = attempts.reduce((a, b) => (a.score >= b.score ? a : b));
+    return best.passed ? { label: 'Done', cls: 'status-done', done: true } : { label: 'Retry', cls: 'status-warn', done: false };
+  }
+  if (lesson.type === 'assignment') {
+    const sub = getSubmissions().filter((x) => x.learnerId === learnerId && x.assignmentId === lesson.assignmentId).pop();
+    if (!sub) return { label: 'To do', cls: 'status-todo', done: false };
+    if (sub.status === 'submitted') return { label: 'Submitted', cls: 'status-warn', done: false };
+    if (sub.status === 'graded' && sub.passed) return { label: 'Done', cls: 'status-done', done: true };
+    if (sub.status === 'graded') return { label: 'Resubmit', cls: 'status-warn', done: false };
+  }
+  return { label: 'To do', cls: 'status-todo', done: false };
+}
+
 function renderCourseDetail(courseId) {
   const c = getCourse(courseId);
   if (!c) return;
   const s = getSession();
-  content().innerHTML = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-course"><i class="bi bi-arrow-left"></i> Back</button><h2 class="page-title">${escapeHtml(c.title)}</h2><p class="text-secondary small">NQF ${c.nqfLevel} · ${c.credits} credits · SAQA ${c.saqaId}</p><h3 class="h6 text-secondary">Modules — tap to open</h3>${(c.lessons || []).map((l, i) => `<div class="lesson-card" data-lesson="${l.id}" role="button"><div class="num">${i + 1}</div><div style="flex:1"><h4>${escapeHtml(l.title)}</h4><p>${l.type}${l.type === 'assignment' ? ' · upload evidence' : ''} · <span style="color:#93c5fd">Open →</span></p></div></div>`).join('')}`;
+  const isTrainer = s.role === 'trainer';
+  const learnerId = isTrainer ? null : s.id;
+  const lessons = c.lessons || [];
+  let doneCount = 0;
+  lessons.forEach((l) => { if (getLessonStatus(courseId, l, learnerId).done) doneCount++; });
+  const docs = [
+    { id: 'ann', title: 'Announcements', icon: 'bi-megaphone', done: true },
+    { id: 'policy', title: 'Learner Policy Document', icon: 'bi-file-earmark-text', done: false },
+    { id: 'id', title: 'ID Copy', icon: 'bi-person-vcard', done: true },
+    { id: 'matric', title: 'Highest Secondary Education Certificate', icon: 'bi-award', done: true },
+    { id: 'cv', title: 'Curriculum Vitae', icon: 'bi-file-person', done: false },
+  ];
+  const modules = [];
+  let chunk = [];
+  lessons.forEach((l, i) => {
+    chunk.push(l);
+    const isBreak = l.type === 'assignment' || i === lessons.length - 1;
+    if (isBreak) { modules.push({ title: 'Module ' + (modules.length + 1), lessons: chunk.slice() }); chunk = []; }
+  });
+  if (chunk.length) modules.push({ title: 'Module ' + (modules.length + 1), lessons: chunk });
+  let html = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-course"><i class="bi bi-arrow-left"></i> Back</button>
+  <div class="course-hero"><div class="course-hero-inner"><h1>${escapeHtml(c.programme || c.title)}</h1><p class="mb-0 small opacity-75">NQF ${c.nqfLevel} · ${c.credits} credits · SAQA ${escapeHtml(c.saqaId || '')}</p></div></div>
+  <div class="apex-card mb-3">
+    <h3 class="apex-section-title">Course documents</h3>
+    ${docs.map((d) => `<div class="activity-row"><div class="activity-left"><i class="bi ${d.icon}"></i><span>${escapeHtml(d.title)}</span></div><span class="status-pill ${d.done ? 'status-done' : 'status-todo'}">${d.done ? '✓ Done' : 'To do'}</span></div>`).join('')}
+  </div>
+  <div class="apex-card mb-3">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h3 class="apex-section-title mb-0">Modules</h3>
+      <span class="text-secondary small">Progress: ${doneCount} / ${lessons.length}</span>
+    </div>
+    ${modules.map((m, mi) => {
+      const mDone = m.lessons.filter((l) => getLessonStatus(courseId, l, learnerId).done).length;
+      return `<div class="module-card" data-module="${mi}" role="button">
+        <div class="module-card-top"><h4>${escapeHtml(m.title)}</h4><i class="bi bi-chevron-right"></i></div>
+        <div class="module-card-meta"><span><i class="bi bi-list-task"></i> Activities: ${m.lessons.length}</span><span><i class="bi bi-graph-up"></i> Progress: ${mDone} / ${m.lessons.length}</span></div>
+      </div>`;
+    }).join('')}
+  </div>`;
+  content().innerHTML = html;
   document.getElementById('btn-back-course')?.addEventListener('click', () => {
-    if (s.role === 'trainer') { renderCatalog(); setNavActive('catalog'); }
+    if (isTrainer) { renderCatalog(); setNavActive('catalog'); }
     else { renderLearnerHome(); setNavActive('home'); }
   });
+  content().querySelectorAll('[data-module]').forEach((el) => {
+    el.addEventListener('click', () => {
+      const mi = Number(el.getAttribute('data-module'));
+      renderModuleSection(courseId, modules[mi], mi);
+    });
+  });
+}
+
+function renderModuleSection(courseId, mod, mi) {
+  const c = getCourse(courseId);
+  const s = getSession();
+  const learnerId = s.role === 'trainer' ? null : s.id;
+  content().innerHTML = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-mod"><i class="bi bi-arrow-left"></i> Back to course</button>
+  <p class="text-secondary small mb-1">${escapeHtml(c.saqaId || '')} · ${escapeHtml(c.programme || c.title)} / ${escapeHtml(mod.title)}</p>
+  <h2 class="page-title">${escapeHtml(mod.title)}</h2>
+  <div class="apex-card">
+    ${mod.lessons.map((l) => {
+      const st = getLessonStatus(courseId, l, learnerId);
+      const icon = l.type === 'guide' || l.type === 'content' ? 'bi-file-earmark-pdf' : l.type === 'quiz' ? 'bi-pencil-square' : 'bi-upload';
+      const due = l.type === 'assignment' || l.type === 'quiz' ? '<div class="activity-dates">Opened: enrolment · Due: end of programme</div>' : '';
+      return `<div class="activity-row clickable" data-lesson="${l.id}" role="button">
+        <div class="activity-left"><i class="bi ${icon}"></i><div><span class="activity-title">${escapeHtml(l.title)}</span>${due}</div></div>
+        <span class="status-pill ${st.cls}">${st.label}</span>
+      </div>`;
+    }).join('')}
+  </div>`;
+  document.getElementById('btn-back-mod')?.addEventListener('click', () => renderCourseDetail(courseId));
   content().querySelectorAll('[data-lesson]').forEach((el) => {
     el.addEventListener('click', () => {
       const lesson = (c.lessons || []).find((x) => x.id === el.getAttribute('data-lesson'));
@@ -40,6 +133,7 @@ function renderCourseDetail(courseId) {
     });
   });
 }
+
 function openLesson(courseId, lesson, isTrainer) {
   if (lesson.type === 'quiz') {
     const quiz = lesson.quiz || { questions: [], passMark: 70 };
@@ -70,9 +164,30 @@ function openLesson(courseId, lesson, isTrainer) {
     return;
   }
   if (lesson.type === 'assignment') return openAssignmentLesson(courseId, lesson, isTrainer);
-  content().innerHTML = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-lesson"><i class="bi bi-arrow-left"></i> Back</button><h2 class="page-title">${escapeHtml(lesson.title)}</h2><p class="text-secondary small mb-3">${lesson.type}</p><div class="content-block">${formatBody(lesson.body)}</div>`;
+  content().innerHTML = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-lesson"><i class="bi bi-arrow-left"></i> Back</button>
+  <div class="status-chips mb-2"><span class="chip chip-ok">✓ Opened</span></div>
+  <h2 class="page-title">${escapeHtml(lesson.title)}</h2>
+  <p class="text-secondary small mb-3">${lesson.type === 'guide' ? 'Learner guide (PDF-style)' : 'Learning content'}</p>
+  <div class="content-block apex-doc">${formatBody(lesson.body)}</div>
+  <button class="btn btn-primary w-100 mt-3" id="btn-mark-done">Mark as Done</button>`;
   document.getElementById('btn-back-lesson')?.addEventListener('click', () => renderCourseDetail(courseId));
+  document.getElementById('btn-mark-done')?.addEventListener('click', () => {
+    const s = getSession();
+    if (s.role === 'learner') {
+      const all = load(KEYS.progress, []);
+      let p = all.find((x) => x.learnerId === s.id && x.courseId === courseId);
+      if (!p) { p = { learnerId: s.id, courseId, completedLessonIds: [], percent: 0 }; all.push(p); }
+      if (!p.completedLessonIds.includes(lesson.id)) p.completedLessonIds.push(lesson.id);
+      const course = getCourse(courseId);
+      const total = (course?.lessons || []).length || 1;
+      p.percent = Math.round((p.completedLessonIds.length / total) * 100);
+      save(KEYS.progress, all);
+    }
+    alert('Marked as Done.');
+    renderCourseDetail(courseId);
+  });
 }
+
 function openAssignmentLesson(courseId, lesson, isTrainer) {
   const s = getSession();
   const mine = getSubmissions().filter((x) => x.learnerId === s.id && x.assignmentId === lesson.assignmentId).pop();
@@ -82,18 +197,47 @@ function openAssignmentLesson(courseId, lesson, isTrainer) {
     return;
   }
   if (mine && mine.status === 'graded') {
-    content().innerHTML = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-lesson"><i class="bi bi-arrow-left"></i> Back</button><h2 class="page-title">${escapeHtml(lesson.title)}</h2><p><span class="badge-soft ${mine.passed ? 'badge-ok' : 'badge-warn'}">Score ${mine.score}%</span></p>${mine.feedback ? `<div class="content-block mb-2"><p class="mb-0"><strong>Feedback:</strong> ${escapeHtml(mine.feedback)}</p></div>` : ''}<div class="content-block mb-2" style="font-size:.9rem">${formatBody(mine.text)}</div><div class="content-block" style="font-size:.85rem"><p class="mb-1">Knowledge: ${fileLinkHtml(mine.attachments?.knowledge)}</p><p class="mb-0">Practical: ${fileLinkHtml(mine.attachments?.practical)}</p></div>${!mine.passed ? `<button class="btn btn-primary w-100" id="btn-resubmit">Resubmit</button>` : ''}`;
+    content().innerHTML = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-lesson"><i class="bi bi-arrow-left"></i> Back</button>
+    <h2 class="page-title">${escapeHtml(lesson.title)}</h2>
+    <div class="status-chips mb-3">
+      <span class="chip chip-ok">✓ Make a submission</span>
+      <span class="chip chip-ok">✓ Receive a grade</span>
+      <span class="chip ${mine.passed ? 'chip-ok' : 'chip-warn'}">${mine.passed ? '✓' : '✗'} Receive a passing grade</span>
+    </div>
+    <h3 class="h6">Submission status</h3>
+    <table class="status-table">
+      <tr><th>Attempt number</th><td>Attempt 1 (2 attempts allowed)</td></tr>
+      <tr><th>Submission status</th><td class="cell-ok">Submitted for grading</td></tr>
+      <tr><th>Grading status</th><td class="cell-ok">Released — ${mine.score}%</td></tr>
+      <tr><th>Result</th><td>${mine.passed ? '<span class="badge-soft badge-ok">Competent</span>' : '<span class="badge-soft badge-warn">Not yet competent</span>'}</td></tr>
+      <tr><th>Feedback</th><td>${escapeHtml(mine.feedback || '—')}</td></tr>
+      <tr><th>File submissions</th><td>${[mine.attachments?.knowledge, mine.attachments?.practical].filter(Boolean).length} file(s)<div class="mt-1">${fileLinkHtml(mine.attachments?.knowledge)} ${fileLinkHtml(mine.attachments?.practical)}</div></td></tr>
+    </table>
+    ${!mine.passed ? `<button class="btn btn-primary w-100 mt-3" id="btn-resubmit">Resubmit</button>` : ''}`;
     document.getElementById('btn-back-lesson')?.addEventListener('click', () => renderCourseDetail(courseId));
     document.getElementById('btn-resubmit')?.addEventListener('click', () => showAssignmentSubmitForm(courseId, lesson, mine));
     return;
   }
   if (mine && mine.status === 'submitted') {
-    content().innerHTML = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-lesson"><i class="bi bi-arrow-left"></i> Back</button><h2 class="page-title">${escapeHtml(lesson.title)}</h2><div class="content-block mb-2"><p class="mb-0">Submitted — awaiting result.</p></div><div class="content-block" style="font-size:.85rem"><p class="mb-1">Knowledge: ${fileLinkHtml(mine.attachments?.knowledge)}</p><p class="mb-0">Practical: ${fileLinkHtml(mine.attachments?.practical)}</p></div>`;
+    content().innerHTML = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-lesson"><i class="bi bi-arrow-left"></i> Back</button>
+    <p class="text-secondary small">${escapeHtml(lesson.title)}</p>
+    <h2 class="page-title">${escapeHtml(lesson.title)}</h2>
+    <div class="status-chips mb-3"><span class="chip chip-ok">✓ Make a submission</span><span class="chip">Receive a grade</span><span class="chip">Receive a passing grade</span></div>
+    <p class="text-secondary small mb-3">Opened: enrolment date<br>Due: end of programme</p>
+    <h3 class="h6">Submission status</h3>
+    <table class="status-table">
+      <tr><th>Attempt number</th><td>This is attempt 1 (2 attempts allowed).</td></tr>
+      <tr><th>Submission status</th><td class="cell-ok">Submitted for grading</td></tr>
+      <tr><th>Grading status</th><td>Not graded yet</td></tr>
+      <tr><th>Last modified</th><td>${mine.submittedAt ? new Date(mine.submittedAt).toLocaleString() : '—'}</td></tr>
+      <tr><th>File submissions</th><td>${[mine.attachments?.knowledge, mine.attachments?.practical].filter(Boolean).length} file(s)<div class="mt-1">${fileLinkHtml(mine.attachments?.knowledge)} ${fileLinkHtml(mine.attachments?.practical)}</div></td></tr>
+    </table>`;
     document.getElementById('btn-back-lesson')?.addEventListener('click', () => renderCourseDetail(courseId));
     return;
   }
   showAssignmentSubmitForm(courseId, lesson, null);
 }
+
 function showAssignmentSubmitForm(courseId, lesson, previous) {
   content().innerHTML = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-lesson"><i class="bi bi-arrow-left"></i> Back</button><h2 class="page-title">${escapeHtml(lesson.title)}</h2><div class="content-block mb-3">${formatBody(lesson.body)}</div><label class="form-label">Knowledge response</label><textarea class="form-control mb-3" id="assignment-text" rows="5"></textarea><label class="form-label">Knowledge evidence</label><input type="file" id="asg-knowledge" class="form-control mb-2" accept=".pdf,.jpg,.jpeg,.png,image/*,application/pdf"><label class="form-label">Practical evidence</label><input type="file" id="asg-practical" class="form-control mb-3" accept=".pdf,.jpg,.jpeg,.png,.mp4,image/*,video/*,application/pdf"><div id="asg-error" class="alert alert-danger d-none py-2"></div><button class="btn btn-primary w-100" id="btn-submit-asg">Upload and submit</button>`;
   document.getElementById('btn-back-lesson')?.addEventListener('click', () => renderCourseDetail(courseId));
@@ -125,6 +269,7 @@ function showAssignmentSubmitForm(courseId, lesson, previous) {
     }
   });
 }
+
 function renderGrading() {
   const subs = getSubmissions().filter((s) => s.status === 'submitted');
   const users = load(KEYS.users, []);
@@ -151,6 +296,7 @@ function renderGrading() {
     });
   });
 }
+
 function renderAttendance() {
   const s = getSession();
   const courses = getCourses();
@@ -172,14 +318,17 @@ function renderAttendance() {
     });
   });
 }
+
 function renderMessages() {
   const s = getSession();
   const messages = load(KEYS.messages, []).filter((m) => m.toUserId === s.id);
   content().innerHTML = `<h2 class="page-title">Inbox</h2>` + (messages.length === 0 ? '<div class="empty">No messages</div>' : messages.map((m) => `<div class="list-card"><h3>${escapeHtml(m.subject)}</h3><p class="mb-0">${escapeHtml(m.body)}</p></div>`).join(''));
 }
+
 function renderAbout() {
-  content().innerHTML = `<h2 class="page-title">About EduFlow</h2><div class="content-block"><p class="mb-2"><strong>Rules</strong></p><ul class="text-secondary small mb-0"><li>One active programme per learner at a time</li><li>Apply with ID + Matric documents</li><li>Admin reviews documents then approves</li><li>Remote attendance register</li><li>Interactive quizzes and graded feedback</li></ul></div>`;
+  content().innerHTML = `<h2 class="page-title">About EduFlow</h2><div class="content-block"><p class="mb-2"><strong>Rules</strong></p><ul class="text-secondary small mb-0"><li>One active programme per learner at a time</li><li>Apply with ID + Matric documents</li><li>Admin reviews documents then approves</li><li>Remote attendance register</li><li>Apex-style modules, Done/To do status, submission table</li></ul></div>`;
 }
+
 async function bootEduFlow() {
   await seedIfNeeded();
   enforceOneProgrammeRule();
