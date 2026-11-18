@@ -14,7 +14,7 @@
   <link rel="apple-touch-icon" href="icons/icon.svg">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css?v=20261118b">
+  <link rel="stylesheet" href="css/styles.css?v=20261118c">
 </head>
 <body>
   <div id="splash">
@@ -38,7 +38,7 @@
       </a>
 
       <div id="auth-steps" class="d-flex justify-content-center gap-2 mb-3" style="font-size:.75rem;color:#94a3b8">
-        <span>1. Create account</span><span>→</span><span>2. Apply</span><span>→</span><span>3. Get approved</span>
+        <span>1. Create account</span><span>→</span><span>2. Verify email</span><span>→</span><span>3. Apply</span><span>→</span><span>4. Get approved</span>
       </div>
 
       <div id="login-panel">
@@ -63,7 +63,7 @@
 
       <div id="register-panel" class="d-none">
         <h2 class="h5 mb-1">Step 1 — Create your account</h2>
-        <p class="text-secondary small mb-3">Register with Gmail. Next you will complete your application.</p>
+        <p class="text-secondary small mb-3">Register with your email. We will send a welcome / verification code.</p>
         <form id="register-form">
           <label class="form-label">Full name</label>
           <input type="text" id="reg-name" class="form-control mb-2" required placeholder="Your full name">
@@ -81,8 +81,22 @@
         <p class="text-center mt-3 mb-0"><a href="#" id="btn-show-login-from-reg" class="link-light" style="color:#93c5fd">Already have an account? Sign in</a></p>
       </div>
 
+      <div id="verify-panel" class="d-none">
+        <h2 class="h5 mb-1">Verify your email</h2>
+        <p class="text-secondary small mb-2">We sent a welcome email with a 6-digit code to <strong id="verify-email-label"></strong>.</p>
+        <div id="verify-demo-code" class="content-block mb-3 d-none" style="font-size:.85rem"></div>
+        <form id="verify-form">
+          <label class="form-label">Verification code</label>
+          <input type="text" id="verify-code" class="form-control form-control-lg mb-3" inputmode="numeric" maxlength="6" placeholder="6-digit code" required>
+          <div id="verify-error" class="alert alert-danger d-none py-2"></div>
+          <button type="submit" class="btn btn-primary btn-lg w-100">Verify email & continue</button>
+        </form>
+        <p class="text-center mt-3 mb-1"><a href="#" id="btn-resend-code" class="link-light" style="color:#93c5fd">Resend code</a></p>
+        <p class="text-center mb-0"><a href="#" id="btn-show-login-from-verify" class="link-light" style="color:#93c5fd">Back to sign in</a></p>
+      </div>
+
       <div id="apply-panel" class="d-none">
-        <h2 class="h5 mb-1">Step 2 — Application</h2>
+        <h2 class="h5 mb-1">Step 3 — Application</h2>
         <p class="text-secondary small mb-3">Choose a programme and upload supporting documents. ID and Matric are required.</p>
         <form id="apply-form">
           <label class="form-label">Preferred programme</label>
@@ -125,7 +139,8 @@
     <nav class="bottom-nav" id="bottom-nav"></nav>
   </div>
 
-  <script type="module" src="js/app.js?v=20261118b"></script>
+  <script type="module" src="js/email-config.js"></script>
+  <script type="module" src="js/app.js?v=20261118c"></script>
   <script>
     setTimeout(function () {
       var s = document.getElementById('splash');
@@ -147,7 +162,7 @@
     });
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=20261118b').catch(() => {});
+        navigator.serviceWorker.register('./sw.js?v=20261118c').catch(() => {});
       });
     }
   </script>
