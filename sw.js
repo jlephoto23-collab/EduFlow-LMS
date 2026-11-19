@@ -1,5 +1,5 @@
-/* EduFlow LMS — network-first so updates show after deploy */
-const CACHE = 'eduflow-v4';
+/* EduFlow LMS — network-first for JS so deploys show without hard cache clear */
+const CACHE = 'eduflow-v5';
 const ASSETS = [
   './',
   './index.html',
@@ -23,15 +23,20 @@ self.addEventListener('activate', (e) => {
 });
 
 self.addEventListener('fetch', (e) => {
-  const req = e.request;
-  if (req.method !== 'GET') return;
+  const url = new URL(e.request.url);
+  if (url.pathname.includes('/js/') || url.pathname.endsWith('.js') || url.pathname.endsWith('.txt')) {
+    e.respondWith(
+      fetch(e.request).then((res) => res).catch(() => caches.match(e.request))
+    );
+    return;
+  }
   e.respondWith(
-    fetch(req)
+    fetch(e.request)
       .then((res) => {
         const copy = res.clone();
-        caches.open(CACHE).then((cache) => cache.put(req, copy));
+        caches.open(CACHE).then((cache) => cache.put(e.request, copy)).catch(() => {});
         return res;
       })
-      .catch(() => caches.match(req))
+      .catch(() => caches.match(e.request).then((r) => r || caches.match('./index.html')))
   );
 });
