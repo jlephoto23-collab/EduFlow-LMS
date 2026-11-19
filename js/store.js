@@ -112,23 +112,47 @@ function applyMidLevelData() {
   });
   if (eChanged) save(KEYS.enrolments, enrolments, { silent: true });
 
-  const sessions = load(KEYS.sessions, []);
-  if (!sessions.length) {
-    const start = new Date();
-    start.setDate(start.getDate() + 2);
-    start.setHours(10, 0, 0, 0);
-    sessions.push({
-      id: 'sess_demo1',
-      courseId: 'c_pm4',
-      title: 'Project kick-off (virtual class)',
-      startsAt: start.toISOString(),
-      durationMin: 90,
-      zoomUrl: 'https://zoom.us/j/83019475621?pwd=EduFlowDemo',
-      zoomMeetingId: '830 1947 5621',
-      hostName: 'Admin Trainer',
-      createdAt: new Date().toISOString(),
-    });
+  let sessions = load(KEYS.sessions, []);
+  if (!sessions.length || sessions.length < 3) {
+    const base = new Date();
+    const mk = (days, hour, id, courseId, title, meetId) => {
+      const d = new Date(base);
+      d.setDate(d.getDate() + days);
+      d.setHours(hour, 0, 0, 0);
+      return {
+        id, courseId, title,
+        startsAt: d.toISOString(),
+        durationMin: 90,
+        zoomUrl: 'https://zoom.us/j/' + meetId + '?pwd=EduFlowDemo',
+        zoomMeetingId: meetId.replace(/(\d{3})(\d{4})(\d{4})/, '$1 $2 $3'),
+        hostName: 'Admin Trainer',
+        createdAt: new Date().toISOString(),
+      };
+    };
+    sessions = [
+      mk(1, 9, 'sess_demo1', 'c_pm4', 'Project kick-off (virtual class)', '83019475621'),
+      mk(3, 14, 'sess_demo2', 'c_pm4', 'Work breakdown & scheduling workshop', '83019475622'),
+      mk(5, 10, 'sess_demo3', 'c_gm4', 'Team leadership live session', '83019475623'),
+      mk(7, 11, 'sess_demo4', 'c_ba4', 'Business admin practical Q&A', '83019475624'),
+    ];
     save(KEYS.sessions, sessions, { silent: true });
+  }
+
+  let certs = load(KEYS.certificates, []);
+  if (!certs.some((c) => c.id === 'cert_demo1')) {
+    certs.unshift({
+      id: 'cert_demo1',
+      learnerId: 'u_l1',
+      courseId: 'c_pm4',
+      learnerName: 'Aisha Learner',
+      programmeTitle: 'Project Management',
+      nqfLevel: 4,
+      credits: 136,
+      saqaId: '50080',
+      issuedAt: new Date().toISOString(),
+      certificateNo: 'EF-2026-DEMO01',
+    });
+    save(KEYS.certificates, certs, { silent: true });
   }
 }
 
@@ -214,7 +238,6 @@ export async function seedIfNeeded() {
   const ver = load('ef_seed_ver', 0);
   const hasUsers = !!load(KEYS.users, null);
 
-  // Existing installs: apply mid-level LMS data automatically
   if (hasUsers) {
     if (ver < 10) {
       applyMidLevelData();
@@ -224,7 +247,6 @@ export async function seedIfNeeded() {
     return;
   }
 
-  // Fresh install
   Object.values(KEYS).forEach((k) => localStorage.removeItem(k));
   localStorage.removeItem('ef_settings');
 
