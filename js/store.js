@@ -34,6 +34,65 @@ export function save(key, value, { silent = false } = {}) {
 }
 export function uid() { return 'id_' + Math.random().toString(36).slice(2, 11); }
 
+function defaultCourses() {
+  return [
+    {
+      id: 'c_pm4', title: 'Project Management support (aligned to NQF pathway)', nqfLevel: 4, credits: 136,
+      saqaId: '50080', programme: 'Project Management', feeZAR: 4500,
+      description: 'Pilot modules for planning and supporting workplace projects.',
+      lessons: [
+        { id: 'pm_g1', title: 'Learner guide: What is a project?', type: 'guide', order: 1, moduleNum: 1, body: 'A project is a temporary effort with a clear start and end. Read carefully before assessments.' },
+        { id: 'pm_m1', title: 'Module 1: Project life cycle', type: 'content', order: 2, moduleNum: 1, body: 'Phases: initiation, planning, execution, monitoring, closure.' },
+        { id: 'pm_q1', title: 'Formative assessment: Project basics', type: 'quiz', order: 3, moduleNum: 1, quiz: { passMark: 70, questions: [
+          { q: 'A project is best described as:', options: ['Ongoing operations', 'A temporary effort with a unique outcome', 'Only construction', 'Any meeting'], correctIndex: 1 },
+          { q: 'Scope means:', options: ['Budget only', 'What is included and excluded', 'Job title', 'Celebration'], correctIndex: 1 },
+          { q: 'Lessons learned belong in:', options: ['Initiation', 'Planning', 'Execution', 'Closure'], correctIndex: 3 },
+        ]}},
+        { id: 'pm_m2', title: 'Module 2: Planning tools', type: 'content', order: 4, moduleNum: 2, body: 'Use task lists, timelines and risk notes.' },
+        { id: 'pm_q2', title: 'Formative assessment: Planning tools', type: 'quiz', order: 5, moduleNum: 2, quiz: { passMark: 70, questions: [
+          { q: 'A Gantt chart mainly shows:', options: ['Company profits', 'Tasks over time', 'HR policies', 'Only risks'], correctIndex: 1 },
+          { q: 'A risk register is used to:', options: ['Ignore problems', 'Record and track risks', 'Replace the budget', 'Hire staff'], correctIndex: 1 },
+        ]}},
+        { id: 'pm_a1', title: 'Summative assignment: Mini project plan', type: 'assignment', order: 6, moduleNum: 2, body: 'Submit goal, 5+ tasks, owners, one risk.', assignmentId: 'asg_pm1' },
+        { id: 'pm_m3', title: 'Module 3: Monitoring and closure', type: 'content', order: 7, moduleNum: 3, body: 'Track progress, manage change, close with lessons learned.' },
+        { id: 'pm_q3', title: 'Formative assessment: Monitoring', type: 'quiz', order: 8, moduleNum: 3, quiz: { passMark: 70, questions: [
+          { q: 'Monitoring compares:', options: ['Plan vs actual', 'Only budget to HR', 'Meetings to emails', 'None'], correctIndex: 0 },
+          { q: 'Project closure includes:', options: ['Ignoring results', 'Lessons learned and handover', 'Starting the same work again only', 'Deleting files'], correctIndex: 1 },
+        ]}},
+        { id: 'pm_a2', title: 'Summative assignment: Closure report', type: 'assignment', order: 9, moduleNum: 3, body: 'Write outcomes, what went well, one improvement.', assignmentId: 'asg_pm2' },
+      ],
+    },
+    {
+      id: 'c_gm4', title: 'Generic Management (NQF Level 4)', nqfLevel: 4, credits: 150,
+      saqaId: '57712', programme: 'Generic Management', feeZAR: 4200,
+      description: 'Pilot programme for junior managers and supervisors.',
+      lessons: [
+        { id: 'gm_g1', title: 'Learner guide: Leading a team', type: 'guide', order: 1, moduleNum: 1, body: 'A team leader plans work, supports people and reports progress.' },
+        { id: 'gm_m1', title: 'Module 1: Team leader role', type: 'content', order: 2, moduleNum: 1, body: 'Allocate tasks, monitor performance, model values.' },
+        { id: 'gm_q1', title: 'Formative assessment: Team leadership', type: 'quiz', order: 3, moduleNum: 1, quiz: { passMark: 70, questions: [{ q: 'A team leader should:', options: ['Ignore conflict', 'Support and guide the team', 'Do all work alone', 'Avoid reporting'], correctIndex: 1 }] }},
+        { id: 'gm_m2', title: 'Module 2: Motivation and communication', type: 'content', order: 4, moduleNum: 2, body: 'Clear goals, feedback and recognition improve performance.' },
+        { id: 'gm_a1', title: 'Summative assignment: Team plan', type: 'assignment', order: 5, moduleNum: 2, body: 'Team goal, two actions, how you check progress.', assignmentId: 'asg_gm1' },
+        { id: 'gm_m3', title: 'Module 3: Workplace problem-solving', type: 'content', order: 6, moduleNum: 3, body: 'Identify problem, facts, solution, follow up.' },
+        { id: 'gm_a2', title: 'Summative assignment: Problem case', type: 'assignment', order: 7, moduleNum: 3, body: 'Problem, options, action, result.', assignmentId: 'asg_gm2' },
+      ],
+    },
+    {
+      id: 'c_ba4', title: 'Business Administration Services (NQF Level 4)', nqfLevel: 4, credits: 140,
+      saqaId: '61595', programme: 'Business Administration', feeZAR: 4000,
+      description: 'Pilot modules for office systems and customer support.',
+      lessons: [
+        { id: 'ba_g1', title: 'Learner guide: Office systems', type: 'guide', order: 1, moduleNum: 1, body: 'Office systems keep information accurate and secure.' },
+        { id: 'ba_m1', title: 'Module 1: Filing and records', type: 'content', order: 2, moduleNum: 1, body: 'Consistent naming, version control, access rules.' },
+        { id: 'ba_q1', title: 'Formative assessment: Records', type: 'quiz', order: 3, moduleNum: 1, quiz: { passMark: 70, questions: [{ q: 'Good filing includes:', options: ['Random folders', 'Consistent naming and structure', 'No backups', 'Sharing passwords'], correctIndex: 1 }] }},
+        { id: 'ba_m2', title: 'Module 2: Professional communication', type: 'content', order: 4, moduleNum: 2, body: 'Clear, polite, purposeful emails and reports.' },
+        { id: 'ba_a1', title: 'Summative assignment: Business email', type: 'assignment', order: 5, moduleNum: 2, body: 'Professional email confirming a meeting with agenda.', assignmentId: 'asg_ba1' },
+        { id: 'ba_m3', title: 'Module 3: Customer support basics', type: 'content', order: 6, moduleNum: 3, body: 'Listen, clarify, resolve or escalate, record outcome.' },
+        { id: 'ba_a2', title: 'Summative assignment: Customer response', type: 'assignment', order: 7, moduleNum: 3, body: 'Response to a delayed order complaint.', assignmentId: 'asg_ba2' },
+      ],
+    },
+  ];
+}
+
 function applyMidLevelData() {
   if (!load(KEYS.sessions, null)) save(KEYS.sessions, [], { silent: true });
   if (!load(KEYS.certificates, null)) save(KEYS.certificates, [], { silent: true });
@@ -46,12 +105,27 @@ function applyMidLevelData() {
     save(KEYS.users, users, { silent: true });
   }
 
-  const courses = load(KEYS.courses, []);
-  let cChanged = false;
-  courses.forEach((c) => {
-    if (c.feeZAR == null) { c.feeZAR = c.id === 'c_pm4' ? 4500 : c.id === 'c_gm4' ? 4200 : 4000; cChanged = true; }
-  });
-  if (cChanged) save(KEYS.courses, courses, { silent: true });
+  // Restore or upgrade courses (modules 1–3)
+  let courses = load(KEYS.courses, []);
+  if (!courses.length) {
+    save(KEYS.courses, defaultCourses(), { silent: true });
+    courses = load(KEYS.courses, []);
+  } else {
+    const defs = defaultCourses();
+    let changed = false;
+    courses.forEach((c) => {
+      if (c.feeZAR == null) {
+        c.feeZAR = c.id === 'c_pm4' ? 4500 : c.id === 'c_gm4' ? 4200 : 4000;
+        changed = true;
+      }
+      const def = defs.find((d) => d.id === c.id);
+      if (def && (!c.lessons || c.lessons.length < def.lessons.length || !(c.lessons || []).some((l) => l.moduleNum === 3))) {
+        c.lessons = def.lessons;
+        changed = true;
+      }
+    });
+    if (changed) save(KEYS.courses, courses, { silent: true });
+  }
 
   let sessions = load(KEYS.sessions, []);
   if (!sessions.length || sessions.length < 3) {
@@ -72,65 +146,7 @@ function applyMidLevelData() {
     save(KEYS.sessions, sessions, { silent: true });
   }
 
-  // Upgrade to 3 modules per programme when still on short lists
-  {
-    const courses2 = load(KEYS.courses, []);
-    let changed = false;
-    const need = (c, n) => !c.lessons || c.lessons.length < n || !(c.lessons || []).some((l) => l.moduleNum === 3);
-    courses2.forEach((c) => {
-      if (c.id === 'c_pm4' && need(c, 8)) {
-        c.lessons = [
-          { id: 'pm_g1', title: 'Learner guide: What is a project?', type: 'guide', order: 1, moduleNum: 1, body: 'A project is a temporary effort with a clear start and end.' },
-          { id: 'pm_m1', title: 'Module 1: Project life cycle', type: 'content', order: 2, moduleNum: 1, body: 'Phases: initiation, planning, execution, monitoring, closure.' },
-          { id: 'pm_q1', title: 'Formative assessment: Project basics', type: 'quiz', order: 3, moduleNum: 1, quiz: { passMark: 70, questions: [
-            { q: 'A project is best described as:', options: ['Ongoing operations', 'A temporary effort with a unique outcome', 'Only construction', 'Any meeting'], correctIndex: 1 },
-            { q: 'Scope means:', options: ['Budget only', 'What is included and excluded', 'Job title', 'Celebration'], correctIndex: 1 },
-            { q: 'Lessons learned belong in:', options: ['Initiation', 'Planning', 'Execution', 'Closure'], correctIndex: 3 },
-          ]}},
-          { id: 'pm_m2', title: 'Module 2: Planning tools', type: 'content', order: 4, moduleNum: 2, body: 'Use task lists, timelines and risk notes.' },
-          { id: 'pm_q2', title: 'Formative assessment: Planning tools', type: 'quiz', order: 5, moduleNum: 2, quiz: { passMark: 70, questions: [
-            { q: 'A Gantt chart mainly shows:', options: ['Company profits', 'Tasks over time', 'HR policies', 'Only risks'], correctIndex: 1 },
-            { q: 'A risk register is used to:', options: ['Ignore problems', 'Record and track risks', 'Replace the budget', 'Hire staff'], correctIndex: 1 },
-          ]}},
-          { id: 'pm_a1', title: 'Summative assignment: Mini project plan', type: 'assignment', order: 6, moduleNum: 2, body: 'Submit goal, 5+ tasks, owners, one risk.', assignmentId: 'asg_pm1' },
-          { id: 'pm_m3', title: 'Module 3: Monitoring and closure', type: 'content', order: 7, moduleNum: 3, body: 'Track progress, manage change, close with lessons learned.' },
-          { id: 'pm_q3', title: 'Formative assessment: Monitoring', type: 'quiz', order: 8, moduleNum: 3, quiz: { passMark: 70, questions: [
-            { q: 'Monitoring compares:', options: ['Plan vs actual', 'Only budget to HR', 'Meetings to emails', 'None'], correctIndex: 0 },
-            { q: 'Project closure includes:', options: ['Ignoring results', 'Lessons learned and handover', 'Starting the same work again only', 'Deleting files'], correctIndex: 1 },
-          ]}},
-          { id: 'pm_a2', title: 'Summative assignment: Closure report', type: 'assignment', order: 9, moduleNum: 3, body: 'Write outcomes, what went well, one improvement.', assignmentId: 'asg_pm2' },
-        ];
-        changed = true;
-      }
-      if (c.id === 'c_gm4' && need(c, 6)) {
-        c.lessons = [
-          { id: 'gm_g1', title: 'Learner guide: Leading a team', type: 'guide', order: 1, moduleNum: 1, body: 'A team leader plans work, supports people and reports progress.' },
-          { id: 'gm_m1', title: 'Module 1: Team leader role', type: 'content', order: 2, moduleNum: 1, body: 'Allocate tasks, monitor performance, model values.' },
-          { id: 'gm_q1', title: 'Formative assessment: Team leadership', type: 'quiz', order: 3, moduleNum: 1, quiz: { passMark: 70, questions: [{ q: 'A team leader should:', options: ['Ignore conflict', 'Support and guide the team', 'Do all work alone', 'Avoid reporting'], correctIndex: 1 }] }},
-          { id: 'gm_m2', title: 'Module 2: Motivation and communication', type: 'content', order: 4, moduleNum: 2, body: 'Clear goals, feedback and recognition improve performance.' },
-          { id: 'gm_a1', title: 'Summative assignment: Team plan', type: 'assignment', order: 5, moduleNum: 2, body: 'Team goal, two actions, how you check progress.', assignmentId: 'asg_gm1' },
-          { id: 'gm_m3', title: 'Module 3: Workplace problem-solving', type: 'content', order: 6, moduleNum: 3, body: 'Identify problem, facts, solution, follow up.' },
-          { id: 'gm_a2', title: 'Summative assignment: Problem case', type: 'assignment', order: 7, moduleNum: 3, body: 'Problem, options, action, result.', assignmentId: 'asg_gm2' },
-        ];
-        changed = true;
-      }
-      if (c.id === 'c_ba4' && need(c, 6)) {
-        c.lessons = [
-          { id: 'ba_g1', title: 'Learner guide: Office systems', type: 'guide', order: 1, moduleNum: 1, body: 'Office systems keep information accurate and secure.' },
-          { id: 'ba_m1', title: 'Module 1: Filing and records', type: 'content', order: 2, moduleNum: 1, body: 'Consistent naming, version control, access rules.' },
-          { id: 'ba_q1', title: 'Formative assessment: Records', type: 'quiz', order: 3, moduleNum: 1, quiz: { passMark: 70, questions: [{ q: 'Good filing includes:', options: ['Random folders', 'Consistent naming and structure', 'No backups', 'Sharing passwords'], correctIndex: 1 }] }},
-          { id: 'ba_m2', title: 'Module 2: Professional communication', type: 'content', order: 4, moduleNum: 2, body: 'Clear, polite, purposeful emails and reports.' },
-          { id: 'ba_a1', title: 'Summative assignment: Business email', type: 'assignment', order: 5, moduleNum: 2, body: 'Professional email confirming a meeting with agenda.', assignmentId: 'asg_ba1' },
-          { id: 'ba_m3', title: 'Module 3: Customer support basics', type: 'content', order: 6, moduleNum: 3, body: 'Listen, clarify, resolve or escalate, record outcome.' },
-          { id: 'ba_a2', title: 'Summative assignment: Customer response', type: 'assignment', order: 7, moduleNum: 3, body: 'Response to a delayed order complaint.', assignmentId: 'asg_ba2' },
-        ];
-        changed = true;
-      }
-    });
-    if (changed) save(KEYS.courses, courses2, { silent: true });
-  }
-
-  // One approved programme; unpaid if not approved/completed
+  // One approved programme only; unpaid if not approved/completed
   {
     const enrolments2 = load(KEYS.enrolments, []);
     let eChanged2 = false;
@@ -180,15 +196,24 @@ function ensurePitchDemoData() {
 export async function seedIfNeeded() {
   const ver = load('ef_seed_ver', 0);
   const hasUsers = !!load(KEYS.users, null);
+
   if (hasUsers) {
-    if (ver < 10) { applyMidLevelData(); save('ef_seed_ver', 10, { silent: true }); }
+    // Always restore/upgrade courses + mid-level data
+    applyMidLevelData();
+    if (ver < 10) save('ef_seed_ver', 10, { silent: true });
     ensurePitchDemoData();
     return;
   }
+
   Object.values(KEYS).forEach((k) => localStorage.removeItem(k));
   localStorage.removeItem('ef_settings');
-  const { runFullSeed } = await import('./seed-data.js');
-  runFullSeed(save, KEYS);
+
+  try {
+    const { runFullSeed } = await import('./seed-data.js');
+    runFullSeed(save, KEYS);
+  } catch {
+    save(KEYS.courses, defaultCourses(), { silent: true });
+  }
   applyMidLevelData();
   save('ef_seed_ver', 10, { silent: true });
 }
