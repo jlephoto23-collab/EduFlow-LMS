@@ -1,1 +1,535 @@
-PLACEHOLDER
+function renderCatalog() {
+  const s = getSession();
+  const courses = getCourses();
+  const enrolments = getEnrolments();
+  content().innerHTML = `<h2 class="page-title">${isStaff(s) ? 'Programmes' : 'Course catalogue'}</h2><p class="text-secondary mb-3">Select a programme. One active programme at a time. Fees shown in ZAR.</p>` +
+    courses.map((c) => {
+      const enr = enrolments.find((e) => e.learnerId === s.id && e.courseId === c.id);
+      const status = enr ? enr.status : null;
+      return `<div class="list-card"><h3>${escapeHtml(c.title)}</h3><p class="text-secondary small mb-2">${escapeHtml(c.description || '')}</p><div class="meta mb-2"><span class="badge-soft">NQF ${c.nqfLevel}</span><span class="badge-soft">${c.credits} credits</span><span class="badge-soft">${formatMoney(c.feeZAR)}</span></div>${isStaff(s) || status === 'approved' ? `<button class="btn btn-sm btn-primary" data-open="${c.id}">Open modules</button>` : status === 'pending' ? `<span class="badge-soft badge-warn">Application pending</span>` : (s.role === 'learner' && hasActiveProgramme(s.id) ? `<span class="badge-soft">Finish current programme first</span>` : `<button class="btn btn-sm btn-primary" data-apply="${c.id}">Apply for this programme</button>`)}</div>`;
+    }).join('');
+  content().querySelectorAll('[data-open]').forEach((btn) => btn.addEventListener('click', () => renderCourseDetail(btn.getAttribute('data-open'))));
+  content().querySelectorAll('[data-apply]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const courseId = btn.getAttribute('data-apply');
+      if (hasActiveProgramme(s.id)) { alert('Complete your current programme first.'); return; }
+      const list = getEnrolments().filter((e) => !(e.learnerId === s.id && e.courseId === courseId));
+      list.push({ id: uid(), courseId, learnerId: s.id, status: 'pending', paymentStatus: 'unpaid', enrolledAt: new Date().toISOString() });
+      saveEnrolments(list);
+      alert('Application submitted.');
+      renderCatalog();
+    });
+  });
+}
+
+function getLessonStatus(courseId, lesson, learnerId) {
+  if (!learnerId) return { label: 'View', cls: '', done: false };
+  if (lesson.type === 'guide' || lesson.type === 'content') {
+    const prog = load(KEYS.progress, []).find((p) => p.learnerId === learnerId && p.courseId === courseId);
+    const done = !!(prog && (prog.completedLessonIds || []).includes(lesson.id));
+    return done ? { label: 'Done', cls: 'status-done', done: true } : { label: 'To do', cls: 'status-todo', done: false };
+  }
+  if (lesson.type === 'quiz') {
+    const attempts = load(KEYS.attempts, []).filter((a) => a.learnerId === learnerId && a.lessonId === lesson.id);
+    if (!attempts.length) return { label: 'To do', cls: 'status-todo', done: false };
+    const best = attempts.reduce((a, b) => (a.score >= b.score ? a : b));
+    return best.passed ? { label: 'Done', cls: 'status-done', done: true } : { label: 'Retry', cls: 'status-warn', done: false };
+  }
+  if (lesson.type === 'assignment') {
+    const sub = getSubmissions().filter((x) => x.learnerId === learnerId && x.assignmentId === lesson.assignmentId).pop();
+    if (!sub) return { label: 'To do', cls: 'status-todo', done: false };
+    if (sub.status === 'submitted') return { label: 'Submitted', cls: 'status-warn', done: false };
+    if (sub.status === 'graded' && sub.passed) return { label: 'Done', cls: 'status-done', done: true };
+    if (sub.status === 'graded') return { label: 'Resubmit', cls: 'status-warn', done: false };
+  }
+  return { label: 'To do', cls: 'status-todo', done: false };
+}
+
+function renderCourseDetail(courseId) {
+  const c = getCourse(courseId);
+  if (!c) return;
+  const s = getSession();
+  const staff = isStaff(s);
+  if (!staff) {
+    const enr = getEnrolments().find((e) => e.learnerId === s.id && e.courseId === courseId && e.status === 'approved');
+    if (enr && getEnrolmentPaymentStatus(enr) !== 'paid') {
+      content().innerHTML = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-course"><i class="bi bi-arrow-left"></i> Back</button>
+        <div class="welcome-banner"><h2>Payment required</h2><p>Settle the programme fee to unlock modules and assessments.</p></div>
+        <div class="content-block mb-3"><p class="mb-1"><strong>${escapeHtml(c.programme || c.title)}</strong></p><p class="mb-0">Fee: <strong>${formatMoney(c.feeZAR)}</strong></p></div>
+        <button class="btn btn-primary w-100" id="btn-go-pay">Pay programme fee</button>`;
+      document.getElementById('btn-back-course')?.addEventListener('click', () => { renderLearnerHome(); setNavActive('home'); });
+      document.getElementById('btn-go-pay')?.addEventListener('click', () => { renderPayments(); setNavActive('payments'); });
+      return;
+    }
+  }
+  const learnerId = staff ? null : s.id;
+  const lessons = c.lessons || [];
+  let doneCount = 0;
+  lessons.forEach((l) => { if (getLessonStatus(courseId, l, learnerId).done) doneCount++; });
+  const savedDocs = (s && s.id) ? load('ef_docs_' + s.id + '_' + courseId, {}) : {};
+  const docs = [
+    { id: 'ann', title: 'Announcements', icon: 'bi-megaphone', done: true },
+    { id: 'policy', title: 'Learner Policy Document', icon: 'bi-file-earmark-text', done: !!savedDocs.policy },
+    { id: 'id', title: 'ID Copy', icon: 'bi-person-vcard', done: true },
+    { id: 'matric', title: 'Highest Secondary Education Certificate', icon: 'bi-award', done: true },
+    { id: 'cv', title: 'Curriculum Vitae', icon: 'bi-file-person', done: !!savedDocs.cv },
+  ];
+  const modules = [];
+  let chunk = [];
+  lessons.forEach((l, i) => {
+    chunk.push(l);
+    if (l.type === 'assignment' || i === lessons.length - 1) { modules.push({ title: 'Module ' + (modules.length + 1), lessons: chunk.slice() }); chunk = []; }
+  });
+  content().innerHTML = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-course"><i class="bi bi-arrow-left"></i> Back</button>
+  <div class="course-hero"><h1>${escapeHtml(c.programme || c.title)}</h1><p class="mb-0 small opacity-75">NQF ${c.nqfLevel} · ${c.credits} credits · ${formatMoney(c.feeZAR)} · SAQA ${escapeHtml(c.saqaId || '')}</p></div>
+  <div class="apex-card mb-3"><h3 class="apex-section-title">Course documents</h3>
+    ${docs.map((d) => `<div class="activity-row clickable" data-doc="${d.id}" role="button"><div class="activity-left"><i class="bi ${d.icon}"></i><span>${escapeHtml(d.title)}</span></div><span class="status-pill ${d.done?'status-done':'status-todo'}">${d.done?'✓ Done':'To do'}</span></div>`).join('')}
+  </div>
+  <div class="apex-card mb-3"><div class="d-flex justify-content-between mb-2"><h3 class="apex-section-title mb-0">Modules</h3><span class="text-secondary small">${doneCount}/${lessons.length}</span></div>
+    ${modules.map((m, mi) => {
+      const mDone = m.lessons.filter((l) => getLessonStatus(courseId, l, learnerId).done).length;
+      return `<div class="module-card" data-module="${mi}" role="button"><div class="module-card-top"><h4>${escapeHtml(m.title)}</h4><i class="bi bi-chevron-right"></i></div><div class="module-card-meta"><span>Activities: ${m.lessons.length}</span><span>Progress: ${mDone}/${m.lessons.length}</span></div></div>`;
+    }).join('')}
+  </div>`;
+  document.getElementById('btn-back-course')?.addEventListener('click', () => {
+    if (staff) { renderCatalog(); } else { renderLearnerHome(); setNavActive('home'); }
+  });
+  content().querySelectorAll('[data-module]').forEach((el) => {
+    el.addEventListener('click', () => renderModuleSection(courseId, modules[Number(el.getAttribute('data-module'))]));
+  });
+  content().querySelectorAll('[data-doc]').forEach((el) => {
+    el.addEventListener('click', () => openCourseDocument(courseId, el.getAttribute('data-doc')));
+  });
+}
+
+function openCourseDocument(courseId, docId) {
+  const titles = { ann: 'Announcements', policy: 'Learner Policy Document', id: 'ID Copy', matric: 'Matric certificate', cv: 'Curriculum Vitae' };
+  const bodies = {
+    ann: 'Provider notices and class schedules appear here.',
+    policy: '1. Mark attendance.\n2. Submit assessments on time.\n3. Original documents only.\n4. Academic integrity required.',
+    id: 'ID on file from your application.',
+    matric: 'Matric certificate on file.',
+    cv: 'CV — mark done after review.',
+  };
+  content().innerHTML = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-doc"><i class="bi bi-arrow-left"></i> Back</button><h2 class="page-title">${escapeHtml(titles[docId]||'Document')}</h2><div class="content-block">${formatBody(bodies[docId]||'')}</div><button class="btn btn-primary w-100 mt-2" id="btn-doc-done">Mark as Done</button>`;
+  document.getElementById('btn-back-doc')?.addEventListener('click', () => renderCourseDetail(courseId));
+  document.getElementById('btn-doc-done')?.addEventListener('click', () => {
+    const s = getSession();
+    if (s) { const key = 'ef_docs_' + s.id + '_' + courseId; const done = load(key, {}); done[docId] = true; save(key, done); }
+    renderCourseDetail(courseId);
+  });
+}
+
+function renderModuleSection(courseId, mod) {
+  const c = getCourse(courseId);
+  const s = getSession();
+  const learnerId = isStaff(s) ? null : s.id;
+  content().innerHTML = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-mod"><i class="bi bi-arrow-left"></i> Back</button>
+  <h2 class="page-title">${escapeHtml(mod.title)}</h2>
+  <div class="apex-card">${mod.lessons.map((l) => {
+    const st = getLessonStatus(courseId, l, learnerId);
+    const icon = l.type === 'quiz' ? 'bi-pencil-square' : l.type === 'assignment' ? 'bi-upload' : 'bi-file-earmark-text';
+    return `<div class="activity-row clickable" data-lesson="${l.id}" role="button"><div class="activity-left"><i class="bi ${icon}"></i><span class="activity-title">${escapeHtml(l.title)}</span></div><span class="status-pill ${st.cls}">${st.label}</span></div>`;
+  }).join('')}</div>`;
+  document.getElementById('btn-back-mod')?.addEventListener('click', () => renderCourseDetail(courseId));
+  content().querySelectorAll('[data-lesson]').forEach((el) => {
+    el.addEventListener('click', () => {
+      const lesson = (c.lessons || []).find((x) => x.id === el.getAttribute('data-lesson'));
+      if (lesson) openLesson(courseId, lesson, isStaff(s));
+    });
+  });
+}
+
+function openLesson(courseId, lesson, isTrainer) {
+  if (lesson.type === 'quiz') {
+    const quiz = lesson.quiz || { questions: [], passMark: 70 };
+    const qs = quiz.questions || [];
+    content().innerHTML = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-lesson"><i class="bi bi-arrow-left"></i> Back</button><h2 class="page-title">${escapeHtml(lesson.title)}</h2><p class="text-secondary mb-3">${qs.length} questions · pass ${quiz.passMark}%</p>` +
+      qs.map((q, qi) => `<div class="content-block mb-2"><p class="mb-2"><strong>${qi+1}. ${escapeHtml(q.q)}</strong></p>${(q.options||[]).map((opt,oi)=>`<label class="d-block mb-1"><input type="radio" name="q${qi}" value="${oi}"> ${escapeHtml(opt)}</label>`).join('')}</div>`).join('') +
+      `<div id="quiz-result" class="d-none content-block mb-2"></div><button class="btn btn-primary w-100" id="btn-submit-quiz">Submit</button>`;
+    document.getElementById('btn-back-lesson')?.addEventListener('click', () => renderCourseDetail(courseId));
+    document.getElementById('btn-submit-quiz')?.addEventListener('click', () => {
+      let correct = 0;
+      qs.forEach((q, qi) => { const sel = document.querySelector(`input[name="q${qi}"]:checked`); if (sel && Number(sel.value) === Number(q.correctIndex)) correct++; });
+      const score = qs.length ? Math.round((correct / qs.length) * 100) : 0;
+      const passed = score >= (quiz.passMark || 70);
+      const attempts = load(KEYS.attempts, []);
+      attempts.push({ id: uid(), learnerId: getSession().id, courseId, lessonId: lesson.id, score, passed, at: new Date().toISOString() });
+      save(KEYS.attempts, attempts);
+      const box = document.getElementById('quiz-result');
+      if (box) { box.classList.remove('d-none'); box.innerHTML = `<span class="badge-soft ${passed?'badge-ok':'badge-warn'}">${passed?'Passed':'Not yet'} — ${score}%</span>`; }
+    });
+    return;
+  }
+  if (lesson.type === 'assignment') return openAssignmentLesson(courseId, lesson, isTrainer);
+  content().innerHTML = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-lesson"><i class="bi bi-arrow-left"></i> Back</button><h2 class="page-title">${escapeHtml(lesson.title)}</h2><div class="content-block">${formatBody(lesson.body)}</div><button class="btn btn-primary w-100 mt-3" id="btn-mark-done">Mark as Done</button>`;
+  document.getElementById('btn-back-lesson')?.addEventListener('click', () => renderCourseDetail(courseId));
+  document.getElementById('btn-mark-done')?.addEventListener('click', () => {
+    const s = getSession();
+    if (s.role === 'learner') {
+      const all = load(KEYS.progress, []);
+      let p = all.find((x) => x.learnerId === s.id && x.courseId === courseId);
+      if (!p) { p = { learnerId: s.id, courseId, completedLessonIds: [], percent: 0 }; all.push(p); }
+      if (!p.completedLessonIds.includes(lesson.id)) p.completedLessonIds.push(lesson.id);
+      const total = (getCourse(courseId)?.lessons || []).length || 1;
+      p.percent = Math.round((p.completedLessonIds.length / total) * 100);
+      save(KEYS.progress, all);
+    }
+    renderCourseDetail(courseId);
+  });
+}
+
+function openAssignmentLesson(courseId, lesson, isTrainer) {
+  const s = getSession();
+  const mine = getSubmissions().filter((x) => x.learnerId === s.id && x.assignmentId === lesson.assignmentId).pop();
+  if (isTrainer) {
+    content().innerHTML = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-lesson"><i class="bi bi-arrow-left"></i> Back</button><h2 class="page-title">${escapeHtml(lesson.title)}</h2><div class="content-block">${formatBody(lesson.body)}</div>`;
+    document.getElementById('btn-back-lesson')?.addEventListener('click', () => renderCourseDetail(courseId));
+    return;
+  }
+  if (mine && (mine.status === 'submitted' || mine.status === 'graded')) {
+    const files = [mine.attachments?.knowledge, mine.attachments?.practical].filter(Boolean);
+    content().innerHTML = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-lesson"><i class="bi bi-arrow-left"></i> Back</button><h2 class="page-title">${escapeHtml(lesson.title)}</h2>
+    <h3 class="h6">Your response</h3><div class="content-block mb-3">${formatBody(mine.text||'—')}</div>
+    <table class="status-table"><tr><th>Status</th><td class="cell-ok">${mine.status}</td></tr>
+    <tr><th>Score</th><td>${mine.score != null ? mine.score + '%' : 'Pending'}</td></tr>
+    <tr><th>Files</th><td>${files.map(fileLinkHtml).join('<br>') || '—'}</td></tr></table>
+    <button class="btn btn-outline-light w-100 mt-3" id="btn-update-submission">Update submission</button>`;
+    document.getElementById('btn-back-lesson')?.addEventListener('click', () => renderCourseDetail(courseId));
+    document.getElementById('btn-update-submission')?.addEventListener('click', () => showAssignmentSubmitForm(courseId, lesson, mine));
+    return;
+  }
+  showAssignmentSubmitForm(courseId, lesson, null);
+}
+
+function showAssignmentSubmitForm(courseId, lesson, previous) {
+  content().innerHTML = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-lesson"><i class="bi bi-arrow-left"></i> Back</button><h2 class="page-title">${escapeHtml(lesson.title)}</h2><div class="content-block mb-3">${formatBody(lesson.body)}</div>
+  <label class="form-label">Knowledge response</label><textarea class="form-control mb-3" id="assignment-text" rows="5">${previous?.text?escapeHtml(previous.text):''}</textarea>
+  <label class="form-label">Knowledge evidence</label><input type="file" id="asg-knowledge" class="form-control mb-2" accept=".pdf,.jpg,.jpeg,.png,image/*,application/pdf">
+  <label class="form-label">Practical evidence</label><input type="file" id="asg-practical" class="form-control mb-3" accept=".pdf,.jpg,.jpeg,.png,image/*,application/pdf">
+  <button class="btn btn-primary w-100" id="btn-submit-asg">Upload and submit</button>`;
+  document.getElementById('btn-back-lesson')?.addEventListener('click', () => renderCourseDetail(courseId));
+  document.getElementById('btn-submit-asg')?.addEventListener('click', async () => {
+    const text = document.getElementById('assignment-text').value.trim();
+    if (text.length < 20) { alert('Write at least 20 characters.'); return; }
+    let knowledge = await readFilesFromInput(document.getElementById('asg-knowledge'), false);
+    let practical = await readFilesFromInput(document.getElementById('asg-practical'), false);
+    if (previous?.attachments) {
+      if (!knowledge) knowledge = previous.attachments.knowledge || null;
+      if (!practical) practical = previous.attachments.practical || null;
+    }
+    if (!knowledge && !practical) { alert('Upload at least one file.'); return; }
+    const s = getSession();
+    const list = getSubmissions();
+    if (previous) {
+      const sub = list.find((x) => x.id === previous.id);
+      if (sub) { sub.text = text; sub.status = 'submitted'; sub.attachments = { knowledge, practical }; sub.submittedAt = new Date().toISOString(); }
+    } else {
+      list.push({ id: uid(), assignmentId: lesson.assignmentId, courseId, learnerId: s.id, text, status: 'submitted', submittedAt: new Date().toISOString(), score: null, feedback: '', attachments: { knowledge, practical } });
+    }
+    save(KEYS.submissions, list);
+    alert('Submitted.');
+    openAssignmentLesson(courseId, lesson, false);
+  });
+}
+
+function renderGrading() {
+  const subs = getSubmissions().filter((s) => s.status === 'submitted');
+  const users = load(KEYS.users, []);
+  content().innerHTML = `<h2 class="page-title">Submissions to grade</h2>` +
+    (subs.length === 0 ? '<div class="empty">Nothing to grade</div>' : subs.map((sub) => {
+      const learner = users.find((u) => u.id === sub.learnerId);
+      return `<div class="list-card"><h3>${escapeHtml(learner?.name || 'Learner')}</h3><div class="content-block mb-2">${formatBody(sub.text)}</div>
+      <p class="small">${fileLinkHtml(sub.attachments?.knowledge)} ${fileLinkHtml(sub.attachments?.practical)}</p>
+      <input type="number" class="form-control mb-2" id="score-${sub.id}" min="0" max="100" value="70">
+      <textarea class="form-control mb-2" id="fb-${sub.id}" rows="2" placeholder="Feedback"></textarea>
+      <button class="btn btn-sm btn-primary" data-grade="${sub.id}">Save grade</button></div>`;
+    }).join(''));
+  content().querySelectorAll('[data-grade]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-grade');
+      const list = getSubmissions();
+      const sub = list.find((s) => s.id === id);
+      if (!sub) return;
+      sub.status = 'graded';
+      sub.score = Number(document.getElementById('score-' + id)?.value) || 0;
+      sub.passed = sub.score >= 70;
+      sub.feedback = document.getElementById('fb-' + id)?.value?.trim() || '';
+      save(KEYS.submissions, list);
+      const learner = users.find((u) => u.id === sub.learnerId);
+      if (learner) pushMessage(learner.id, learner.gmail || learner.email, 'Graded — ' + sub.score + '%', sub.feedback || '');
+      renderGrading();
+    });
+  });
+}
+
+function renderAttendance() {
+  const s = getSession();
+  const courses = getCourses();
+  const attendance = getAttendance();
+  if (isStaff(s)) {
+    const users = load(KEYS.users, []).filter((u) => u.role === 'learner');
+    content().innerHTML = `<h2 class="page-title">Attendance register</h2>` +
+      (attendance.slice(0, 40).map((a) => {
+        const learner = users.find((u) => u.id === a.learnerId);
+        const course = courses.find((c) => c.id === a.courseId);
+        return `<div class="list-card"><h3>${escapeHtml(learner?.name || 'Learner')}</h3><p class="text-secondary small">${escapeHtml(course?.title || '')}</p><span class="badge-soft badge-ok">${escapeHtml(a.date)}</span></div>`;
+      }).join('') || '<div class="empty">No attendance yet</div>');
+    return;
+  }
+  const enrolments = getApprovedEnrolments(s.id);
+  const day = todayISODate();
+  content().innerHTML = `<h2 class="page-title">Mark attendance</h2><p class="page-subtitle">Today ${day}</p>` +
+    (enrolments.map((e) => {
+      const c = courses.find((x) => x.id === e.courseId);
+      const already = attendance.find((a) => a.learnerId === s.id && a.courseId === e.courseId && a.date === day);
+      return `<div class="list-card"><h3>${escapeHtml(c?.title || '')}</h3>${already ? '<span class="badge-soft badge-ok">Present today</span>' : `<button class="btn btn-sm btn-primary" data-mark="${e.courseId}">Mark present</button>`}</div>`;
+    }).join('') || '<div class="empty">No active programme</div>');
+  content().querySelectorAll('[data-mark]').forEach((btn) => {
+    btn.addEventListener('click', () => { markAttendance(s.id, btn.getAttribute('data-mark')); renderAttendance(); });
+  });
+}
+
+function renderLiveSessions() {
+  const s = getSession();
+  const sessions = getSessions().slice().sort((a, b) => String(a.startsAt).localeCompare(String(b.startsAt)));
+  const courses = getCourses();
+  let html = `<h2 class="page-title">Live classes</h2><p class="page-subtitle">Zoom-integrated virtual sessions</p>`;
+  if (isStaff(s)) {
+    html += `<div class="content-block mb-3"><p class="mb-2"><strong>Schedule Zoom session</strong></p>
+      <select id="sess-course" class="form-control mb-2">${courses.map((c)=>`<option value="${c.id}">${escapeHtml(c.programme||c.title)}</option>`).join('')}</select>
+      <input id="sess-title" class="form-control mb-2" value="Virtual class session">
+      <input type="datetime-local" id="sess-start" class="form-control mb-2">
+      <button class="btn btn-primary w-100" id="btn-create-session">Create Zoom session</button></div>`;
+  }
+  html += sessions.map((sess) => {
+    const course = courses.find((c) => c.id === sess.courseId);
+    const when = sess.startsAt ? new Date(sess.startsAt).toLocaleString() : '—';
+    return `<div class="list-card"><h3>${escapeHtml(sess.title)}</h3>
+      <p class="text-secondary small mb-1">${escapeHtml(course?.programme || '')}</p>
+      <p class="mb-2"><span class="badge-soft">${escapeHtml(when)}</span> · ${sess.durationMin||60} min</p>
+      <p class="text-secondary small mb-2">Meeting ID: ${escapeHtml(sess.zoomMeetingId||'—')}</p>
+      <a class="btn btn-sm btn-primary" href="${escapeHtml(sess.zoomUrl)}" target="_blank" rel="noopener"><i class="bi bi-camera-video me-1"></i> Join Zoom</a>
+      ${isStaff(s)?`<button class="btn btn-sm btn-outline-light ms-1" data-del-sess="${sess.id}">Remove</button>`:''}</div>`;
+  }).join('') || '<div class="empty">No sessions scheduled</div>';
+  content().innerHTML = html;
+  document.getElementById('btn-create-session')?.addEventListener('click', () => {
+    const local = document.getElementById('sess-start')?.value;
+    createZoomSession({
+      courseId: document.getElementById('sess-course')?.value,
+      title: document.getElementById('sess-title')?.value?.trim() || 'Virtual class',
+      startsAt: local ? new Date(local).toISOString() : new Date().toISOString(),
+      durationMin: 90,
+    });
+    renderLiveSessions();
+  });
+  content().querySelectorAll('[data-del-sess]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      saveSessions(getSessions().filter((x) => x.id !== btn.getAttribute('data-del-sess')));
+      renderLiveSessions();
+    });
+  });
+}
+
+function renderPayments() {
+  const s = getSession();
+  const courses = getCourses();
+  if (isStaff(s)) {
+    const enrolments = getEnrolments().filter((e) => e.status === 'approved' || e.status === 'pending');
+    const users = load(KEYS.users, []);
+    content().innerHTML = `<h2 class="page-title">Payments</h2><p class="page-subtitle">Programme fees · PayFast/Stripe-ready in production · Mark paid when EFT received</p>` +
+      enrolments.map((e) => {
+        const learner = users.find((u) => u.id === e.learnerId);
+        const course = courses.find((c) => c.id === e.courseId);
+        const pay = getEnrolmentPaymentStatus(e);
+        return `<div class="list-card"><h3>${escapeHtml(learner?.name||'Learner')}</h3>
+          <p class="text-secondary small">${escapeHtml(course?.programme||'')} · ${formatMoney(course?.feeZAR)}</p>
+          <span class="badge-soft ${pay==='paid'?'badge-ok':'badge-warn'}">${pay}</span>
+          ${pay!=='paid'&&isAdmin(s)?`<button class="btn btn-sm btn-primary mt-2" data-mark-paid="${e.id}">Mark as paid</button>`:''}</div>`;
+      }).join('') || '<div class="empty">No enrolments</div>';
+    content().querySelectorAll('[data-mark-paid]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const row = getEnrolments().find((x) => x.id === btn.getAttribute('data-mark-paid'));
+        if (row) recordPayment({ learnerId: row.learnerId, courseId: row.courseId, amount: getCourse(row.courseId)?.feeZAR || 0, method: 'manual' });
+        renderPayments();
+      });
+    });
+    return;
+  }
+  const enrolments = getEnrolments().filter((e) => e.learnerId === s.id);
+  content().innerHTML = `<h2 class="page-title">Fees & payments</h2><p class="page-subtitle">Secure fee payment. Demo checkout for this pitch — production connects to PayFast (South Africa) or Stripe.</p>` +
+    enrolments.map((e) => {
+      const course = courses.find((c) => c.id === e.courseId);
+      const pay = getEnrolmentPaymentStatus(e);
+      return `<div class="list-card"><h3>${escapeHtml(course?.programme||course?.title||'')}</h3>
+        <p class="mb-2">${formatMoney(course?.feeZAR)}</p>
+        <span class="badge-soft ${pay==='paid'?'badge-ok':'badge-warn'}">${pay==='paid'?'Paid':'Outstanding'}</span>
+        ${pay!=='paid'?`<button class="btn btn-primary w-100 mt-3" data-pay="${e.courseId}">Pay with card (demo)</button>`:''}</div>`;
+    }).join('') || '<div class="empty">No programmes yet</div>';
+  content().querySelectorAll('[data-pay]').forEach((btn) => {
+    btn.addEventListener('click', () => showCheckout(btn.getAttribute('data-pay')));
+  });
+}
+
+function showCheckout(courseId) {
+  const course = getCourse(courseId);
+  const s = getSession();
+  content().innerHTML = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-pay"><i class="bi bi-arrow-left"></i> Back</button>
+    <h2 class="page-title">Checkout</h2>
+    <div class="content-block mb-3"><p class="mb-1"><strong>${escapeHtml(course?.programme||'')}</strong></p><p class="mb-0">Amount: <strong>${formatMoney(course?.feeZAR)}</strong></p></div>
+    <label class="form-label">Cardholder</label><input class="form-control mb-2" id="pay-name" value="${escapeHtml(s?.name||'')}">
+    <label class="form-label">Card number (demo)</label><input class="form-control mb-2" id="pay-card" value="4242 4242 4242 4242">
+    <div class="row g-2 mb-3"><div class="col-6"><input class="form-control" placeholder="MM/YY" value="12/28"></div><div class="col-6"><input class="form-control" placeholder="CVC" value="123"></div></div>
+    <button class="btn btn-primary w-100" id="btn-pay-now">Pay ${formatMoney(course?.feeZAR)}</button>
+    <p class="text-secondary small text-center mt-2">Demo only — no real charge. Production: PayFast or Stripe payment gateway.</p>`;
+  document.getElementById('btn-back-pay')?.addEventListener('click', renderPayments);
+  document.getElementById('btn-pay-now')?.addEventListener('click', () => {
+    recordPayment({ learnerId: s.id, courseId, amount: course?.feeZAR || 0, method: 'card' });
+    pushMessage(s.id, s.gmail || s.email, 'Payment received', 'Payment of ' + formatMoney(course?.feeZAR) + ' successful.');
+    alert('Payment successful. Modules unlocked.');
+    renderPayments();
+  });
+}
+
+function renderCertificates() {
+  const s = getSession();
+  let certs = getCertificates();
+  if (!isStaff(s)) certs = certs.filter((c) => c.learnerId === s.id);
+  content().innerHTML = `<h2 class="page-title">Certificates</h2><p class="page-subtitle">Issued on programme completion</p>` +
+    (certs.map((c) => `<div class="list-card list-link" data-cert="${c.id}" role="button"><h3>${escapeHtml(c.programmeTitle)}</h3>
+      <p class="text-secondary small mb-1">${escapeHtml(c.learnerName)} · NQF ${c.nqfLevel||'—'}</p>
+      <span class="badge-soft badge-ok">${escapeHtml(c.certificateNo)}</span></div>`).join('') || '<div class="empty">No certificates yet</div>');
+  content().querySelectorAll('[data-cert]').forEach((el) => {
+    el.addEventListener('click', () => showCertificate(el.getAttribute('data-cert')));
+  });
+}
+
+function showCertificate(certId) {
+  const cert = getCertificates().find((c) => c.id === certId);
+  if (!cert) return;
+  const issued = cert.issuedAt ? new Date(cert.issuedAt).toLocaleDateString() : '—';
+  content().innerHTML = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-cert"><i class="bi bi-arrow-left"></i> Back</button>
+    <div class="certificate-sheet">
+      <div class="cert-brand">EduFlow LMS</div>
+      <div class="cert-label">Certificate of Completion</div>
+      <p class="cert-line">This is to certify that</p>
+      <div class="cert-name">${escapeHtml(cert.learnerName)}</div>
+      <p class="cert-line">has successfully completed</p>
+      <div class="cert-programme">${escapeHtml(cert.programmeTitle)}</div>
+      <p class="cert-meta">NQF Level ${escapeHtml(String(cert.nqfLevel||'—'))} · ${escapeHtml(String(cert.credits||'—'))} credits</p>
+      <p class="cert-meta">No. <strong>${escapeHtml(cert.certificateNo)}</strong> · Issued ${escapeHtml(issued)}</p>
+      <p class="cert-footer">Pilot certificate — not an official SETA statement of results.</p>
+    </div>
+    <button class="btn btn-primary w-100 mt-3" id="btn-print-cert"><i class="bi bi-printer me-1"></i> Print / Save PDF</button>`;
+  document.getElementById('btn-back-cert')?.addEventListener('click', renderCertificates);
+  document.getElementById('btn-print-cert')?.addEventListener('click', () => window.print());
+}
+
+function renderMessages() {
+  const s = getSession();
+  const messages = load(KEYS.messages, []).filter((m) => m.toUserId === s.id);
+  content().innerHTML = `<h2 class="page-title">Inbox</h2>` +
+    (messages.map((m) => `<div class="list-card"><h3>${escapeHtml(m.subject)}</h3><p class="mb-0">${escapeHtml(m.body)}</p></div>`).join('') || '<div class="empty">No messages</div>');
+}
+
+function renderAbout() {
+  const s = getSession();
+  content().innerHTML = `<div class="welcome-banner"><h2>EduFlow LMS</h2><p>Mid-level platform — applications, payments, Zoom classes, assessments and certificates.</p></div>
+  <div class="content-block mb-3"><p class="mb-2"><strong>Capabilities</strong></p>
+    <ul class="text-secondary small mb-0">
+      <li><strong>Role-based access</strong> — Admin, Facilitator, Learner</li>
+      <li><strong>Payments</strong> — programme fees; demo checkout now, PayFast/Stripe in production</li>
+      <li><strong>Live classes</strong> — Zoom session links</li>
+      <li><strong>Certificates</strong> — issued on completion</li>
+      <li>Applications, modules, quizzes, grading, attendance</li>
+    </ul></div>
+  <div class="list-card list-link mb-2" id="about-certs" role="button"><h3>Certificates</h3><p class="mb-0">View issued certificates</p></div>
+  ${!isStaff(s)?'<div class="list-card list-link mb-2" id="about-pay" role="button"><h3>Fees & payments</h3><p class="mb-0">Pay programme fees</p></div>':''}
+  ${!isStaff(s)?'<div class="list-card list-link mb-2" id="about-inbox" role="button"><h3>Inbox</h3><p class="mb-0">Provider messages</p></div>':''}
+  ${isStaff(s)?'<div class="list-card list-link mb-2" id="about-attend" role="button"><h3>Attendance</h3><p class="mb-0">Remote register</p></div>':''}
+  <button class="btn btn-outline-light w-100 mt-2" id="btn-theme-about">Toggle theme</button>`;
+  document.getElementById('btn-theme-about')?.addEventListener('click', toggleTheme);
+  document.getElementById('about-certs')?.addEventListener('click', renderCertificates);
+  document.getElementById('about-pay')?.addEventListener('click', renderPayments);
+  document.getElementById('about-inbox')?.addEventListener('click', renderMessages);
+  document.getElementById('about-attend')?.addEventListener('click', renderAttendance);
+}
+
+async function bootEduFlow() {
+  await seedIfNeeded();
+  enforceOneProgrammeRule();
+  wireThemeToggles();
+  setTimeout(() => document.getElementById('splash')?.classList.add('hide'), 400);
+  document.getElementById('login-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const result = login(document.getElementById('email').value.trim(), document.getElementById('password').value);
+    const err = document.getElementById('login-error');
+    if (!result.ok) { err.textContent = result.message; err.classList.remove('d-none'); return; }
+    err.classList.add('d-none');
+    if (result.needsVerify) showVerifyPanel(result.user);
+    else if (result.needsApplication) showApplicationStep(result.user);
+    else if (result.pending) showAwaitingApproval();
+    else showApp();
+  });
+  document.getElementById('btn-register')?.addEventListener('click', (e) => { e.preventDefault(); showRegisterPanel(); });
+  document.getElementById('btn-show-login')?.addEventListener('click', (e) => { e.preventDefault(); logout(); });
+  document.getElementById('btn-show-login-from-reg')?.addEventListener('click', (e) => { e.preventDefault(); showLogin(); });
+  document.getElementById('btn-show-login-from-verify')?.addEventListener('click', (e) => { e.preventDefault(); logout(); });
+  document.getElementById('register-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const err = document.getElementById('reg-error');
+    err?.classList.add('d-none');
+    const result = createLearnerAccount({
+      name: document.getElementById('reg-name')?.value.trim() || '',
+      email: document.getElementById('reg-email')?.value.trim() || '',
+      phone: document.getElementById('reg-phone')?.value.trim() || '',
+      password: document.getElementById('reg-password')?.value || '',
+      password2: document.getElementById('reg-password2')?.value || '',
+    });
+    if (!result.ok) { if (err) { err.textContent = result.message; err.classList.remove('d-none'); } return; }
+    await sendWelcomeEmail({ to: result.user.email, name: result.user.name, code: result.code });
+    showVerifyPanel(result.user);
+  });
+  document.getElementById('verify-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const s = getSession();
+    if (!s) return showLogin();
+    const result = verifyLearnerEmail(s.id, document.getElementById('verify-code')?.value.trim() || '');
+    const err = document.getElementById('verify-error');
+    if (!result.ok) { if (err) { err.textContent = result.message; err.classList.remove('d-none'); } return; }
+    showApplicationStep(result.user);
+  });
+  document.getElementById('btn-resend-code')?.addEventListener('click', async (e) => {
+    e.preventDefault();
+    const s = getSession(); if (!s) return;
+    const users = load(KEYS.users, []);
+    const user = users.find((u) => u.id === s.id);
+    if (!user) return;
+    user.verifyCode = generateVerifyCode();
+    save(KEYS.users, users); setSession(user);
+    await sendWelcomeEmail({ to: user.email, name: user.name, code: user.verifyCode });
+    showVerifyPanel(user);
+  });
+  document.getElementById('apply-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const s = getSession();
+    if (!s) return showRegisterPanel();
+    const hasDisability = !!document.getElementById('apply-disability')?.checked;
+    const idCopy = await readFilesFromInput(document.getElementById('apply-id'), false);
+    const matric = await readFilesFromInput(document.getElementById('apply-matric'), false);
+    const otherCerts = await readFilesFromInput(document.getElementById('apply-other'), true);
+    const disabilityNote = hasDisability ? await readFilesFromInput(document.getElementById('apply-note'), false) : null;
+    const result = submitApplicationForUser(s.id, {
+      programmeId: document.getElementById('apply-programme')?.value || '',
+      notes: document.getElementById('apply-notes')?.value.trim() || '',
+      documents: { hasDisability, idCopy, matric, otherCerts, disabilityNote },
+    });
+    const err = document.getElementById('apply-error');
+    if (!result.ok) { if (err) { err.textContent = result.message; err.classList.remove('d-none'); } return; }
+    showAwaitingApproval();
+  });
+  document.getElementById('btn-logout')?.addEventListener('click', logout);
+  if (getSession()) showApp(); else showLogin();
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bootEduFlow);
+else bootEduFlow();
