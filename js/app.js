@@ -7,7 +7,7 @@ Object.assign(globalThis, { KEYS, load, save, uid, seedIfNeeded, onLiveChange, g
 const base = new URL('./', import.meta.url);
 const parts = await Promise.all(
   ['c0.txt', 'c1.txt'].map((n) =>
-    fetch(new URL(n + '?v=20261118j', base)).then((r) => {
+    fetch(new URL(n + '?v=20261118k', base)).then((r) => {
       if (!r.ok) throw new Error('Failed ' + n);
       return r.text();
     })
