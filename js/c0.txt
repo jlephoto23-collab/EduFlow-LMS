@@ -1,1 +1,348 @@
-PLACEHOLDER
+const MAX_FILE_BYTES = 1.5 * 1024 * 1024;
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function formatBody(t) {
+  return escapeHtml(t || '').replace(/\n/g, '<br>');
+}
+function formatMoney(n) {
+  return 'R' + Number(n || 0).toLocaleString('en-ZA');
+}
+function content() { return document.getElementById('content'); }
+function getSession() { return load(KEYS.session, null); }
+function setSession(u) { save(KEYS.session, u ? { id: u.id, name: u.name, email: u.email, role: u.role, gmail: u.gmail || u.email } : null); }
+function isStaff(s) { return s && (s.role === 'admin' || s.role === 'facilitator'); }
+function isAdmin(s) { return s && s.role === 'admin'; }
+function getCourses() { return load(KEYS.courses, []); }
+function getCourse(id) { return getCourses().find((c) => c.id === id); }
+function getEnrolments() { return load(KEYS.enrolments, []); }
+function saveEnrolments(list) { save(KEYS.enrolments, list); }
+function getSubmissions() { return load(KEYS.submissions, []); }
+function getAttendance() { return load(KEYS.attendance, []); }
+function getSessions() { return load(KEYS.sessions, []); }
+function saveSessions(list) { save(KEYS.sessions, list); }
+function getCertificates() { return load(KEYS.certificates, []); }
+function getPayments() { return load(KEYS.payments, []); }
+function savePayments(list) { save(KEYS.payments, list); }
+function getEnrolmentPaymentStatus(enr) {
+  if (!enr) return 'unpaid';
+  if (enr.paymentStatus === 'paid' || enr.paymentStatus === 'pending' || enr.paymentStatus === 'unpaid') return enr.paymentStatus;
+  return 'unpaid';
+}
+function recordPayment({ learnerId, courseId, amount, method, ref }) {
+  const payments = getPayments();
+  payments.unshift({
+    id: uid(), learnerId, courseId, amount, method: method || 'card',
+    ref: ref || ('EF-' + Math.random().toString(36).slice(2, 8).toUpperCase()),
+    at: new Date().toISOString(), status: 'completed',
+  });
+  savePayments(payments);
+  const list = getEnrolments();
+  const row = list.find((e) => e.learnerId === learnerId && e.courseId === courseId && e.status === 'approved');
+  if (row) { row.paymentStatus = 'paid'; saveEnrolments(list); }
+}
+function getApprovedEnrolments(learnerId) { return getEnrolments().filter((e) => e.learnerId === learnerId && e.status === 'approved'); }
+function hasActiveProgramme(learnerId) { return getApprovedEnrolments(learnerId).length > 0; }
+function enforceOneProgrammeRule() {
+  const enrolments = getEnrolments();
+  const byLearner = {};
+  enrolments.forEach((e) => {
+    if (e.status !== 'approved') return;
+    if (!byLearner[e.learnerId]) byLearner[e.learnerId] = [];
+    byLearner[e.learnerId].push(e);
+  });
+  let changed = false;
+  Object.values(byLearner).forEach((list) => {
+    if (list.length <= 1) return;
+    list.sort((a, b) => String(b.enrolledAt || '').localeCompare(String(a.enrolledAt || '')));
+    list.slice(1).forEach((e) => { e.status = 'completed'; e.paymentStatus = e.paymentStatus || 'unpaid'; changed = true; });
+  });
+  if (changed) saveEnrolments(enrolments);
+}
+function todayISODate() { return new Date().toISOString().slice(0, 10); }
+function markAttendance(learnerId, courseId) {
+  const list = getAttendance();
+  const day = todayISODate();
+  if (list.some((a) => a.learnerId === learnerId && a.courseId === courseId && a.date === day)) return;
+  list.unshift({ id: uid(), learnerId, courseId, date: day, at: new Date().toISOString() });
+  save(KEYS.attendance, list);
+}
+function createZoomSession({ courseId, title, startsAt, durationMin }) {
+  const list = getSessions();
+  const meetId = String(Math.floor(10000000000 + Math.random() * 89999999999));
+  list.unshift({
+    id: uid(), courseId, title, startsAt, durationMin: durationMin || 90,
+    zoomUrl: 'https://zoom.us/j/' + meetId + '?pwd=EduFlowDemo',
+    zoomMeetingId: meetId, hostName: getSession()?.name || 'Host',
+  });
+  saveSessions(list);
+}
+function pushMessage(toUserId, toEmail, subject, body) {
+  const messages = load(KEYS.messages, []);
+  messages.unshift({ id: uid(), toUserId, toEmail, subject, body, at: new Date().toISOString() });
+  save(KEYS.messages, messages);
+}
+async function readFilesFromInput(input, multiple) {
+  if (!input || !input.files || !input.files.length) return multiple ? [] : null;
+  const files = multiple ? Array.from(input.files) : [input.files[0]];
+  const out = [];
+  for (const file of files) {
+    if (file.size > MAX_FILE_BYTES) {
+      out.push({ name: file.name, type: file.type, size: file.size, dataUrl: null, tooLarge: true });
+      continue;
+    }
+    const dataUrl = await new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = reject;
+      r.readAsDataURL(file);
+    });
+    out.push({ name: file.name, type: file.type, size: file.size, dataUrl, tooLarge: false });
+  }
+  return multiple ? out : out[0];
+}
+function fileLinkHtml(f) {
+  if (!f) return '';
+  if (f.tooLarge || !f.dataUrl) return escapeHtml(f.name || 'file') + ' (unavailable)';
+  return `<a href="${f.dataUrl}" target="_blank" rel="noopener">${escapeHtml(f.name || 'file')}</a>`;
+}
+function generateVerifyCode() { return String(Math.floor(100000 + Math.random() * 900000)); }
+async function sendWelcomeEmail({ to, name, code }) {
+  console.log('Welcome email to', to, 'code', code);
+  return true;
+}
+function createLearnerAccount({ name, email, phone, password, password2 }) {
+  if (!name || !email || !password) return { ok: false, message: 'Complete all required fields.' };
+  if (password.length < 6) return { ok: false, message: 'Password must be at least 6 characters.' };
+  if (password !== password2) return { ok: false, message: 'Passwords do not match.' };
+  const users = load(KEYS.users, []);
+  if (users.some((u) => String(u.email).toLowerCase() === email.toLowerCase())) return { ok: false, message: 'Email already registered.' };
+  const code = generateVerifyCode();
+  const user = { id: uid(), name, email, phone, password, role: 'learner', gmail: email, status: 'unverified', verifyCode: code, emailVerified: false };
+  users.push(user);
+  save(KEYS.users, users);
+  setSession(user);
+  return { ok: true, user, code };
+}
+function verifyLearnerEmail(userId, code) {
+  const users = load(KEYS.users, []);
+  const user = users.find((u) => u.id === userId);
+  if (!user) return { ok: false, message: 'Session expired.' };
+  if (String(user.verifyCode) !== String(code).trim()) return { ok: false, message: 'Invalid code.' };
+  user.emailVerified = true;
+  user.status = 'verified';
+  user.verifyCode = null;
+  save(KEYS.users, users);
+  setSession(user);
+  return { ok: true, user };
+}
+function submitApplicationForUser(userId, { programmeId, notes, documents }) {
+  if (!programmeId) return { ok: false, message: 'Select a programme.' };
+  if (!documents?.idCopy || !documents?.matric) return { ok: false, message: 'ID and Matric uploads are required.' };
+  if (documents.hasDisability && !documents.disabilityNote) return { ok: false, message: 'Doctor note required for disability.' };
+  if (hasActiveProgramme(userId)) return { ok: false, message: 'You already have an active programme.' };
+  const list = getEnrolments().filter((e) => !(e.learnerId === userId && e.courseId === programmeId));
+  list.push({ id: uid(), courseId: programmeId, learnerId: userId, status: 'pending', paymentStatus: 'unpaid', enrolledAt: new Date().toISOString(), notes, documents });
+  saveEnrolments(list);
+  const users = load(KEYS.users, []);
+  const user = users.find((u) => u.id === userId);
+  if (user) { user.status = 'pending'; save(KEYS.users, users); setSession(user); }
+  return { ok: true };
+}
+function login(email, password) {
+  const users = load(KEYS.users, []);
+  const user = users.find((u) => String(u.email).toLowerCase() === String(email).toLowerCase() && u.password === password);
+  if (!user) return { ok: false, message: 'Invalid email or password.' };
+  setSession(user);
+  if (user.role === 'learner') {
+    if (user.status === 'unverified' || user.emailVerified === false) return { ok: true, needsVerify: true, user };
+    const enr = getEnrolments().filter((e) => e.learnerId === user.id);
+    if (!enr.length && user.status !== 'approved') return { ok: true, needsApplication: true, user };
+    if (enr.every((e) => e.status === 'pending') || user.status === 'pending') return { ok: true, pending: true, user };
+  }
+  return { ok: true, user };
+}
+function logout() { setSession(null); showLogin(); }
+function showLogin() {
+  document.getElementById('app-view')?.classList.add('d-none');
+  document.getElementById('login-view')?.classList.remove('d-none');
+  document.getElementById('login-panel')?.classList.remove('d-none');
+  document.getElementById('register-panel')?.classList.add('d-none');
+  document.getElementById('verify-panel')?.classList.add('d-none');
+  document.getElementById('apply-panel')?.classList.add('d-none');
+}
+function showRegisterPanel() {
+  document.getElementById('login-panel')?.classList.add('d-none');
+  document.getElementById('register-panel')?.classList.remove('d-none');
+  document.getElementById('verify-panel')?.classList.add('d-none');
+  document.getElementById('apply-panel')?.classList.add('d-none');
+}
+function showVerifyPanel(user) {
+  document.getElementById('login-panel')?.classList.add('d-none');
+  document.getElementById('register-panel')?.classList.add('d-none');
+  document.getElementById('verify-panel')?.classList.remove('d-none');
+  document.getElementById('apply-panel')?.classList.add('d-none');
+  const label = document.getElementById('verify-email-label');
+  if (label) label.textContent = user?.email || '';
+  const demo = document.getElementById('verify-demo-code');
+  if (demo && user?.verifyCode) { demo.classList.remove('d-none'); demo.textContent = 'Demo code: ' + user.verifyCode; }
+}
+function showApplicationStep(user) {
+  document.getElementById('login-panel')?.classList.add('d-none');
+  document.getElementById('register-panel')?.classList.add('d-none');
+  document.getElementById('verify-panel')?.classList.add('d-none');
+  document.getElementById('apply-panel')?.classList.remove('d-none');
+  const sel = document.getElementById('apply-programme');
+  if (sel) {
+    sel.innerHTML = getCourses().map((c) => `<option value="${c.id}">${escapeHtml(c.programme || c.title)}</option>`).join('');
+  }
+}
+function showAwaitingApproval() {
+  document.getElementById('app-view')?.classList.add('d-none');
+  document.getElementById('login-view')?.classList.remove('d-none');
+  document.getElementById('login-panel')?.classList.remove('d-none');
+  document.getElementById('register-panel')?.classList.add('d-none');
+  document.getElementById('verify-panel')?.classList.add('d-none');
+  document.getElementById('apply-panel')?.classList.add('d-none');
+  alert('Application submitted. Please wait for admin approval, then sign in again.');
+  logout();
+}
+function toggleTheme() {
+  const cur = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+  const next = cur === 'light' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem('ef_theme', next); } catch (_) {}
+  wireThemeToggles();
+}
+function wireThemeToggles() {
+  const theme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+  ['theme-icon', 'theme-icon-login'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.className = theme === 'light' ? 'bi bi-moon-stars-fill' : 'bi bi-sun-fill';
+  });
+  document.getElementById('btn-theme-toggle')?.addEventListener('click', toggleTheme);
+  document.getElementById('btn-theme-login')?.addEventListener('click', toggleTheme);
+}
+function setNavActive(key) {
+  document.querySelectorAll('#bottom-nav .nav-item, #bottom-nav a').forEach((el) => {
+    el.classList.toggle('active', el.getAttribute('data-nav') === key);
+  });
+}
+function renderBottomNav(s) {
+  const nav = document.getElementById('bottom-nav');
+  if (!nav) return;
+  if (isStaff(s)) {
+    nav.innerHTML = `
+      <button type="button" class="nav-item active" data-nav="home"><i class="bi bi-speedometer2"></i>Dashboard</button>
+      <button type="button" class="nav-item" data-nav="courses"><i class="bi bi-journal-bookmark"></i>Programmes</button>
+      <button type="button" class="nav-item" data-nav="live"><i class="bi bi-camera-video"></i>Live</button>
+      <button type="button" class="nav-item" data-nav="grade"><i class="bi bi-pencil-square"></i>Grade</button>
+      <button type="button" class="nav-item" data-nav="more"><i class="bi bi-grid"></i>More</button>`;
+  } else {
+    nav.innerHTML = `
+      <button type="button" class="nav-item active" data-nav="home"><i class="bi bi-house"></i>Home</button>
+      <button type="button" class="nav-item" data-nav="courses"><i class="bi bi-journal-bookmark"></i>Courses</button>
+      <button type="button" class="nav-item" data-nav="live"><i class="bi bi-camera-video"></i>Live</button>
+      <button type="button" class="nav-item" data-nav="payments"><i class="bi bi-credit-card"></i>Pay</button>
+      <button type="button" class="nav-item" data-nav="more"><i class="bi bi-grid"></i>More</button>`;
+  }
+  nav.querySelectorAll('[data-nav]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const k = btn.getAttribute('data-nav');
+      setNavActive(k);
+      if (k === 'home') isStaff(s) ? renderAdminHome() : renderLearnerHome();
+      else if (k === 'courses') renderCatalog();
+      else if (k === 'live') renderLiveSessions();
+      else if (k === 'payments') renderPayments();
+      else if (k === 'grade') renderGrading();
+      else if (k === 'more') renderAbout();
+    });
+  });
+}
+function showApp() {
+  const s = getSession();
+  if (!s) return showLogin();
+  document.getElementById('login-view')?.classList.add('d-none');
+  document.getElementById('app-view')?.classList.remove('d-none');
+  const chip = document.getElementById('user-chip');
+  if (chip) chip.textContent = (s.name || s.email) + ' · ' + (s.role || '');
+  renderBottomNav(s);
+  if (isStaff(s)) renderAdminHome(); else renderLearnerHome();
+  setNavActive('home');
+}
+function renderLearnerHome() {
+  const s = getSession();
+  const approved = getApprovedEnrolments(s.id);
+  const courses = getCourses();
+  content().innerHTML = `<div class="welcome-banner"><h2>Welcome, ${escapeHtml(s.name || 'Learner')}</h2>
+    <p>One active programme at a time. Pay the fee to unlock modules.</p></div>` +
+    (approved.length ? approved.map((e) => {
+      const c = courses.find((x) => x.id === e.courseId);
+      const pay = getEnrolmentPaymentStatus(e);
+      return `<div class="list-card list-link" data-open="${e.courseId}" role="button">
+        <h3>${escapeHtml(c?.programme || c?.title || '')}</h3>
+        <p class="text-secondary small mb-2">NQF ${c?.nqfLevel} · ${formatMoney(c?.feeZAR)}</p>
+        <span class="badge-soft ${pay==='paid'?'badge-ok':'badge-warn'}">${pay==='paid'?'Paid — open modules':'Payment outstanding'}</span>
+      </div>`;
+    }).join('') : `<div class="empty">No approved programme yet. Apply under Courses.</div>
+      <button class="btn btn-primary w-100" id="btn-home-courses">Go to Courses</button>`);
+  content().querySelectorAll('[data-open]').forEach((el) => el.addEventListener('click', () => renderCourseDetail(el.getAttribute('data-open'))));
+  document.getElementById('btn-home-courses')?.addEventListener('click', () => { renderCatalog(); setNavActive('courses'); });
+}
+function renderAdminHome() {
+  const users = load(KEYS.users, []);
+  const enrolments = getEnrolments();
+  const pending = enrolments.filter((e) => e.status === 'pending');
+  const toGrade = getSubmissions().filter((s) => s.status === 'submitted');
+  content().innerHTML = `<div class="welcome-banner"><h2>Provider dashboard</h2><p>Approve applications, grade submissions, manage live classes.</p></div>
+    <div class="list-card list-link" id="dash-pending" role="button"><h3>Pending applications</h3><p class="mb-0">${pending.length} awaiting review</p></div>
+    <div class="list-card list-link" id="dash-grade" role="button"><h3>To grade</h3><p class="mb-0">${toGrade.length} submissions</p></div>
+    <div class="list-card list-link" id="dash-courses" role="button"><h3>Programmes</h3><p class="mb-0">${getCourses().length} active</p></div>`;
+  document.getElementById('dash-pending')?.addEventListener('click', renderApprovals);
+  document.getElementById('dash-grade')?.addEventListener('click', () => { renderGrading(); setNavActive('grade'); });
+  document.getElementById('dash-courses')?.addEventListener('click', () => { renderCatalog(); setNavActive('courses'); });
+}
+function renderApprovals() {
+  const pending = getEnrolments().filter((e) => e.status === 'pending');
+  const users = load(KEYS.users, []);
+  const courses = getCourses();
+  content().innerHTML = `<h2 class="page-title">Applications</h2>` +
+    (pending.length === 0 ? '<div class="empty">No pending applications</div>' : pending.map((e) => {
+      const u = users.find((x) => x.id === e.learnerId);
+      const c = courses.find((x) => x.id === e.courseId);
+      return `<div class="list-card"><h3>${escapeHtml(u?.name || 'Learner')}</h3>
+        <p class="text-secondary small">${escapeHtml(c?.programme || '')}</p>
+        <p class="small">${fileLinkHtml(e.documents?.idCopy)} ${fileLinkHtml(e.documents?.matric)}</p>
+        <div class="d-flex gap-2 mt-2">
+          <button class="btn btn-sm btn-primary" data-approve="${e.id}">Approve</button>
+          <button class="btn btn-sm btn-outline-light" data-reject="${e.id}">Decline</button>
+        </div></div>`;
+    }).join(''));
+  content().querySelectorAll('[data-approve]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const list = getEnrolments();
+      const row = list.find((x) => x.id === btn.getAttribute('data-approve'));
+      if (!row) return;
+      // one programme only
+      list.forEach((e) => {
+        if (e.learnerId === row.learnerId && e.status === 'approved') e.status = 'completed';
+      });
+      row.status = 'approved';
+      row.paymentStatus = 'unpaid';
+      saveEnrolments(list);
+      const users2 = load(KEYS.users, []);
+      const u = users2.find((x) => x.id === row.learnerId);
+      if (u) { u.status = 'approved'; save(KEYS.users, users2); }
+      if (u) pushMessage(u.id, u.email, 'Application approved', 'Your application was approved. Sign in, pay the fee under Pay, then open modules.');
+      renderApprovals();
+    });
+  });
+  content().querySelectorAll('[data-reject]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const list = getEnrolments().filter((x) => x.id !== btn.getAttribute('data-reject'));
+      saveEnrolments(list);
+      renderApprovals();
+    });
+  });
+}
