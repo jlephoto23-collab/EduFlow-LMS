@@ -1,95 +1,130 @@
-/**
- * EduFlow data store — mid-level LMS
- */
-import { isFirebaseEnabled } from './firebase-config.js';
-
-export const KEYS = {
-  users: 'ef_users', session: 'ef_session', courses: 'ef_courses', enrolments: 'ef_enrolments',
-  progress: 'ef_progress', attempts: 'ef_attempts', assignments: 'ef_assignments',
-  submissions: 'ef_submissions', applications: 'ef_applications', messages: 'ef_messages',
-  attendance: 'ef_attendance', sessions: 'ef_sessions', certificates: 'ef_certificates', payments: 'ef_payments',
+const KEYS = {
+  users: 'ef_users',
+  session: 'ef_session',
+  courses: 'ef_courses',
+  enrolments: 'ef_enrolments',
+  progress: 'ef_progress',
+  attempts: 'ef_attempts',
+  submissions: 'ef_submissions',
+  messages: 'ef_messages',
+  attendance: 'ef_attendance',
+  sessions: 'ef_sessions',
+  certificates: 'ef_certificates',
+  payments: 'ef_payments',
 };
 
-const CHANNEL_NAME = 'eduflow-live';
-let channel = null;
-const listeners = new Set();
-try {
-  channel = new BroadcastChannel(CHANNEL_NAME);
-  channel.onmessage = (ev) => { if (ev.data?.type === 'ef-change') listeners.forEach((fn) => fn(ev.data)); };
-} catch { channel = null; }
+const CHANNEL = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('eduflow_live') : null;
 
-window.addEventListener('storage', (e) => {
-  if (!e.key || !String(e.key).startsWith('ef_')) return;
-  listeners.forEach((fn) => fn({ type: 'ef-change', key: e.key, source: 'storage' }));
-});
-
-export function onLiveChange(fn) { listeners.add(fn); return () => listeners.delete(fn); }
-export function getLiveMode() { return isFirebaseEnabled() ? 'firebase' : 'tab-sync'; }
 export function load(key, fallback) {
-  try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback; } catch { return fallback; }
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw == null) return fallback;
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
 }
-export function save(key, value, { silent = false } = {}) {
+
+export function save(key, value, opts = {}) {
   localStorage.setItem(key, JSON.stringify(value));
-  if (!silent) { try { channel?.postMessage({ type: 'ef-change', key, at: Date.now() }); } catch {} }
+  if (!opts.silent && CHANNEL) {
+    try { CHANNEL.postMessage({ type: 'change', key }); } catch (_) {}
+  }
 }
-export function uid() { return 'id_' + Math.random().toString(36).slice(2, 11); }
+
+export function uid() {
+  return 'id_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+}
+
+export function onLiveChange(fn) {
+  if (!CHANNEL) return () => {};
+  const handler = (e) => fn(e.data);
+  CHANNEL.addEventListener('message', handler);
+  return () => CHANNEL.removeEventListener('message', handler);
+}
+
+export function getLiveMode() {
+  return !!CHANNEL;
+}
 
 function defaultCourses() {
+  const quiz = (id, title, q) => ({
+    id, title, type: 'quiz', moduleNum: 1,
+    quiz: { passMark: 70, questions: q },
+  });
+  const guide = (id, title, body, mod) => ({ id, title, type: 'guide', body, moduleNum: mod || 1 });
+  const content = (id, title, body, mod) => ({ id, title, type: 'content', body, moduleNum: mod || 1 });
+  const assignment = (id, title, body, assignmentId, mod) => ({
+    id, title, type: 'assignment', body, assignmentId, moduleNum: mod || 1,
+  });
+
+  const pmLessons = [
+    guide('pm_g1', 'Learner guide — Project life cycle', 'Introduction to project phases: initiate, plan, execute, close.', 1),
+    content('pm_c1', 'Project life cycle overview', 'Projects move through defined stages. Document scope, stakeholders and risks.', 1),
+    quiz('pm_q1', 'Formative assessment: Project basics', [
+      { q: 'Which is a project phase?', options: ['Ignore scope', 'Initiate', 'Skip risks', 'Avoid close'], correctIndex: 1 },
+    ]),
+    assignment('pm_a1', 'Summative: Project charter', 'Prepare a short project charter for a workplace improvement project. Upload knowledge and practical evidence.', 'asg_pm1', 1),
+    guide('pm_g2', 'Module 2 — Stakeholders', 'Identify and manage stakeholders.', 2),
+    content('pm_c2', 'Stakeholder mapping', 'List interest and influence. Plan communication.', 2),
+    quiz('pm_q2', 'Formative: Stakeholders', [
+      { q: 'A stakeholder is someone who:', options: ['Is never affected', 'Has interest in the project', 'Only funds IT', 'Avoids meetings'], correctIndex: 1 },
+    ]),
+    assignment('pm_a2', 'Summative: Stakeholder register', 'Build a stakeholder register and communication plan. Upload evidence.', 'asg_pm2', 2),
+    guide('pm_g3', 'Module 3 — Risk', 'Identify, analyse and respond to risks.', 3),
+    content('pm_c3', 'Risk register basics', 'Likelihood × impact. Mitigate, accept, transfer or avoid.', 3),
+    quiz('pm_q3', 'Formative: Risk', [
+      { q: 'Risk response options include:', options: ['Only ignore', 'Mitigate and accept', 'Delete the project', 'Hide issues'], correctIndex: 1 },
+    ]),
+    assignment('pm_a3', 'Summative: Risk register', 'Create a risk register for your project. Upload knowledge and practical evidence.', 'asg_pm3', 3),
+  ];
+
+  const gmLessons = [
+    guide('gm_g1', 'Learner guide — Team leadership', 'Lead teams ethically and effectively.', 1),
+    content('gm_c1', 'Module 1: Team leader role', 'Allocate tasks, monitor performance, model values.', 1),
+    quiz('gm_q1', 'Formative assessment: Team leadership', [
+      { q: 'A team leader should:', options: ['Ignore conflict', 'Support and guide the team', 'Do all work alone', 'Avoid reporting'], correctIndex: 1 },
+    ]),
+    assignment('gm_a1', 'Summative: Leadership reflection', 'Describe a team situation and how you applied leadership principles. Upload evidence.', 'asg_gm1', 1),
+    guide('gm_g2', 'Module 2 — Communication', 'Clear workplace communication.', 2),
+    content('gm_c2', 'Meeting and feedback skills', 'Agenda, minutes, constructive feedback.', 2),
+    quiz('gm_q2', 'Formative: Communication', [
+      { q: 'Effective feedback is:', options: ['Personal attacks', 'Specific and constructive', 'Only negative', 'Delayed forever'], correctIndex: 1 },
+    ]),
+    assignment('gm_a2', 'Summative: Communication plan', 'Draft a team communication plan. Upload evidence.', 'asg_gm2', 2),
+    guide('gm_g3', 'Module 3 — Performance', 'Monitor and improve performance.', 3),
+    content('gm_c3', 'Performance conversations', 'Set goals, review progress, support improvement.', 3),
+    quiz('gm_q3', 'Formative: Performance', [
+      { q: 'Performance goals should be:', options: ['Vague', 'SMART', 'Secret', 'Impossible'], correctIndex: 1 },
+    ]),
+    assignment('gm_a3', 'Summative: Performance review', 'Prepare a sample performance review conversation plan. Upload evidence.', 'asg_gm3', 3),
+  ];
+
+  const baLessons = [
+    guide('ba_g1', 'Learner guide — Office admin', 'Support business administration processes.', 1),
+    content('ba_c1', 'Module 1: Records management', 'File, retrieve and protect information.', 1),
+    quiz('ba_q1', 'Formative: Records', [
+      { q: 'Records should be:', options: ['Thrown away randomly', 'Organised and retrievable', 'Never backed up', 'Shared with everyone'], correctIndex: 1 },
+    ]),
+    assignment('ba_a1', 'Summative: Filing system', 'Design a simple filing system for a small office. Upload evidence.', 'asg_ba1', 1),
+    guide('ba_g2', 'Module 2 — Customer service', 'Professional service standards.', 2),
+    content('ba_c2', 'Handling enquiries', 'Listen, clarify, resolve or escalate.', 2),
+    quiz('ba_q2', 'Formative: Service', [
+      { q: 'Good customer service includes:', options: ['Ignoring calls', 'Clear and respectful communication', 'Blaming the client', 'No follow-up'], correctIndex: 1 },
+    ]),
+    assignment('ba_a2', 'Summative: Service scenario', 'Respond to a customer complaint scenario. Upload evidence.', 'asg_ba2', 2),
+    guide('ba_g3', 'Module 3 — Workplace admin', 'Diaries, meetings and basic reports.', 3),
+    content('ba_c3', 'Meeting support', 'Prepare agenda, take notes, action list.', 3),
+    quiz('ba_q3', 'Formative: Meetings', [
+      { q: 'A meeting agenda should:', options: ['Be optional always', 'List topics and time', 'Hide the purpose', 'Exclude actions'], correctIndex: 1 },
+    ]),
+    assignment('ba_a3', 'Summative: Meeting pack', 'Prepare a sample agenda and minutes template. Upload evidence.', 'asg_ba3', 3),
+  ];
+
   return [
-    {
-      id: 'c_pm4', title: 'Project Management support (aligned to NQF pathway)', nqfLevel: 4, credits: 136,
-      saqaId: '50080', programme: 'Project Management', feeZAR: 4500,
-      description: 'Pilot modules for planning and supporting workplace projects.',
-      lessons: [
-        { id: 'pm_g1', title: 'Learner guide: What is a project?', type: 'guide', order: 1, moduleNum: 1, body: 'A project is a temporary effort with a clear start and end. Read carefully before assessments.' },
-        { id: 'pm_m1', title: 'Module 1: Project life cycle', type: 'content', order: 2, moduleNum: 1, body: 'Phases: initiation, planning, execution, monitoring, closure.' },
-        { id: 'pm_q1', title: 'Formative assessment: Project basics', type: 'quiz', order: 3, moduleNum: 1, quiz: { passMark: 70, questions: [
-          { q: 'A project is best described as:', options: ['Ongoing operations', 'A temporary effort with a unique outcome', 'Only construction', 'Any meeting'], correctIndex: 1 },
-          { q: 'Scope means:', options: ['Budget only', 'What is included and excluded', 'Job title', 'Celebration'], correctIndex: 1 },
-          { q: 'Lessons learned belong in:', options: ['Initiation', 'Planning', 'Execution', 'Closure'], correctIndex: 3 },
-        ]}},
-        { id: 'pm_m2', title: 'Module 2: Planning tools', type: 'content', order: 4, moduleNum: 2, body: 'Use task lists, timelines and risk notes.' },
-        { id: 'pm_q2', title: 'Formative assessment: Planning tools', type: 'quiz', order: 5, moduleNum: 2, quiz: { passMark: 70, questions: [
-          { q: 'A Gantt chart mainly shows:', options: ['Company profits', 'Tasks over time', 'HR policies', 'Only risks'], correctIndex: 1 },
-          { q: 'A risk register is used to:', options: ['Ignore problems', 'Record and track risks', 'Replace the budget', 'Hire staff'], correctIndex: 1 },
-        ]}},
-        { id: 'pm_a1', title: 'Summative assignment: Mini project plan', type: 'assignment', order: 6, moduleNum: 2, body: 'Submit goal, 5+ tasks, owners, one risk.', assignmentId: 'asg_pm1' },
-        { id: 'pm_m3', title: 'Module 3: Monitoring and closure', type: 'content', order: 7, moduleNum: 3, body: 'Track progress, manage change, close with lessons learned.' },
-        { id: 'pm_q3', title: 'Formative assessment: Monitoring', type: 'quiz', order: 8, moduleNum: 3, quiz: { passMark: 70, questions: [
-          { q: 'Monitoring compares:', options: ['Plan vs actual', 'Only budget to HR', 'Meetings to emails', 'None'], correctIndex: 0 },
-          { q: 'Project closure includes:', options: ['Ignoring results', 'Lessons learned and handover', 'Starting the same work again only', 'Deleting files'], correctIndex: 1 },
-        ]}},
-        { id: 'pm_a2', title: 'Summative assignment: Closure report', type: 'assignment', order: 9, moduleNum: 3, body: 'Write outcomes, what went well, one improvement.', assignmentId: 'asg_pm2' },
-      ],
-    },
-    {
-      id: 'c_gm4', title: 'Generic Management (NQF Level 4)', nqfLevel: 4, credits: 150,
-      saqaId: '57712', programme: 'Generic Management', feeZAR: 4200,
-      description: 'Pilot programme for junior managers and supervisors.',
-      lessons: [
-        { id: 'gm_g1', title: 'Learner guide: Leading a team', type: 'guide', order: 1, moduleNum: 1, body: 'A team leader plans work, supports people and reports progress.' },
-        { id: 'gm_m1', title: 'Module 1: Team leader role', type: 'content', order: 2, moduleNum: 1, body: 'Allocate tasks, monitor performance, model values.' },
-        { id: 'gm_q1', title: 'Formative assessment: Team leadership', type: 'quiz', order: 3, moduleNum: 1, quiz: { passMark: 70, questions: [{ q: 'A team leader should:', options: ['Ignore conflict', 'Support and guide the team', 'Do all work alone', 'Avoid reporting'], correctIndex: 1 }] }},
-        { id: 'gm_m2', title: 'Module 2: Motivation and communication', type: 'content', order: 4, moduleNum: 2, body: 'Clear goals, feedback and recognition improve performance.' },
-        { id: 'gm_a1', title: 'Summative assignment: Team plan', type: 'assignment', order: 5, moduleNum: 2, body: 'Team goal, two actions, how you check progress.', assignmentId: 'asg_gm1' },
-        { id: 'gm_m3', title: 'Module 3: Workplace problem-solving', type: 'content', order: 6, moduleNum: 3, body: 'Identify problem, facts, solution, follow up.' },
-        { id: 'gm_a2', title: 'Summative assignment: Problem case', type: 'assignment', order: 7, moduleNum: 3, body: 'Problem, options, action, result.', assignmentId: 'asg_gm2' },
-      ],
-    },
-    {
-      id: 'c_ba4', title: 'Business Administration Services (NQF Level 4)', nqfLevel: 4, credits: 140,
-      saqaId: '61595', programme: 'Business Administration', feeZAR: 4000,
-      description: 'Pilot modules for office systems and customer support.',
-      lessons: [
-        { id: 'ba_g1', title: 'Learner guide: Office systems', type: 'guide', order: 1, moduleNum: 1, body: 'Office systems keep information accurate and secure.' },
-        { id: 'ba_m1', title: 'Module 1: Filing and records', type: 'content', order: 2, moduleNum: 1, body: 'Consistent naming, version control, access rules.' },
-        { id: 'ba_q1', title: 'Formative assessment: Records', type: 'quiz', order: 3, moduleNum: 1, quiz: { passMark: 70, questions: [{ q: 'Good filing includes:', options: ['Random folders', 'Consistent naming and structure', 'No backups', 'Sharing passwords'], correctIndex: 1 }] }},
-        { id: 'ba_m2', title: 'Module 2: Professional communication', type: 'content', order: 4, moduleNum: 2, body: 'Clear, polite, purposeful emails and reports.' },
-        { id: 'ba_a1', title: 'Summative assignment: Business email', type: 'assignment', order: 5, moduleNum: 2, body: 'Professional email confirming a meeting with agenda.', assignmentId: 'asg_ba1' },
-        { id: 'ba_m3', title: 'Module 3: Customer support basics', type: 'content', order: 6, moduleNum: 3, body: 'Listen, clarify, resolve or escalate, record outcome.' },
-        { id: 'ba_a2', title: 'Summative assignment: Customer response', type: 'assignment', order: 7, moduleNum: 3, body: 'Response to a delayed order complaint.', assignmentId: 'asg_ba2' },
-      ],
-    },
+    { id: 'c_pm4', title: 'Project Management NQF 4', programme: 'Project Management', description: 'Plan and support projects in the workplace.', nqfLevel: 4, credits: 136, saqaId: '50080', feeZAR: 4500, lessons: pmLessons },
+    { id: 'c_gm4', title: 'Generic Management NQF 4', programme: 'Generic Management', description: 'Lead teams and improve workplace performance.', nqfLevel: 4, credits: 150, saqaId: '57712', feeZAR: 4200, lessons: gmLessons },
+    { id: 'c_ba4', title: 'Business Administration NQF 4', programme: 'Business Administration', description: 'Support office and business administration processes.', nqfLevel: 4, credits: 140, saqaId: '61595', feeZAR: 4000, lessons: baLessons },
   ];
 }
 
@@ -99,13 +134,42 @@ function applyMidLevelData() {
   if (!load(KEYS.payments, null)) save(KEYS.payments, [], { silent: true });
   if (!load(KEYS.attendance, null)) save(KEYS.attendance, [], { silent: true });
 
+  // Ensure demo learner Aisha has one approved programme (for Pay + modules)
+  (function ensureDemoLearnerEnrolment() {
+    const users = load(KEYS.users, []);
+    const aisha = users.find((u) => u.email === 'learner1@gmail.com' || u.id === 'u_l1');
+    if (!aisha) return;
+    let enrolments = load(KEYS.enrolments, []);
+    const mine = enrolments.filter((e) => e.learnerId === aisha.id && e.status === 'approved');
+    if (!mine.length) {
+      enrolments = enrolments.filter((e) => !(e.learnerId === aisha.id && e.status === 'approved'));
+      enrolments.push({
+        id: 'e1',
+        courseId: 'c_pm4',
+        learnerId: aisha.id,
+        status: 'approved',
+        paymentStatus: 'unpaid',
+        enrolledAt: new Date().toISOString(),
+      });
+      save(KEYS.enrolments, enrolments, { silent: true });
+    } else {
+      let changed = false;
+      enrolments.forEach((e) => {
+        if (e.learnerId === aisha.id && e.status === 'approved' && !e.paymentStatus) {
+          e.paymentStatus = 'unpaid';
+          changed = true;
+        }
+      });
+      if (changed) save(KEYS.enrolments, enrolments, { silent: true });
+    }
+  })();
+
   const users = load(KEYS.users, []);
   if (users.length && !users.some((u) => u.email === 'facilitator@eduflow.test')) {
     users.push({ id: 'u_fac', name: 'Facilitator Dlamini', email: 'facilitator@eduflow.test', password: 'facil123', role: 'facilitator', gmail: 'facilitator@eduflow.test', status: 'approved' });
     save(KEYS.users, users, { silent: true });
   }
 
-  // Restore or upgrade courses (modules 1–3)
   let courses = load(KEYS.courses, []);
   if (!courses.length) {
     save(KEYS.courses, defaultCourses(), { silent: true });
@@ -135,49 +199,14 @@ function applyMidLevelData() {
       return { id, courseId, title, startsAt: d.toISOString(), durationMin: 90,
         zoomUrl: 'https://zoom.us/j/' + meetId + '?pwd=EduFlowDemo',
         zoomMeetingId: meetId.replace(/(\d{3})(\d{4})(\d{4})/, '$1 $2 $3'),
-        hostName: 'Admin Trainer', createdAt: new Date().toISOString() };
+        hostName: 'Facilitator Dlamini' };
     };
     sessions = [
-      mk(1, 9, 'sess_demo1', 'c_pm4', 'Project kick-off (virtual class)', '83019475621'),
-      mk(3, 14, 'sess_demo2', 'c_pm4', 'Work breakdown & scheduling workshop', '83019475622'),
-      mk(5, 10, 'sess_demo3', 'c_gm4', 'Team leadership live session', '83019475623'),
-      mk(7, 11, 'sess_demo4', 'c_ba4', 'Business admin practical Q&A', '83019475624'),
+      mk(1, 9, 'sess1', 'c_pm4', 'PM virtual class — Project charter', '12345678901'),
+      mk(2, 14, 'sess2', 'c_gm4', 'Generic Management — Team leadership', '23456789012'),
+      mk(3, 10, 'sess3', 'c_ba4', 'Business Admin — Records workshop', '34567890123'),
     ];
     save(KEYS.sessions, sessions, { silent: true });
-  }
-
-  // One approved programme only; unpaid if not approved/completed
-  {
-    const enrolments2 = load(KEYS.enrolments, []);
-    let eChanged2 = false;
-    const approvedByLearner = {};
-    enrolments2.forEach((e) => {
-      if (e.status !== 'approved' && e.status !== 'completed' && e.paymentStatus === 'paid') {
-        e.paymentStatus = 'unpaid'; eChanged2 = true;
-      }
-      if (e.status === 'approved') {
-        if (!approvedByLearner[e.learnerId]) approvedByLearner[e.learnerId] = [];
-        approvedByLearner[e.learnerId].push(e);
-      }
-    });
-    Object.values(approvedByLearner).forEach((list) => {
-      if (list.length <= 1) return;
-      list.sort((a, b) => String(a.enrolledAt || '').localeCompare(String(b.enrolledAt || '')));
-      for (let i = 1; i < list.length; i++) {
-        list[i].status = 'inactive'; list[i].paymentStatus = 'unpaid'; eChanged2 = true;
-      }
-    });
-    if (eChanged2) save(KEYS.enrolments, enrolments2, { silent: true });
-  }
-
-  let certs = load(KEYS.certificates, []);
-  if (!certs.some((c) => c.id === 'cert_demo1')) {
-    certs.unshift({
-      id: 'cert_demo1', learnerId: 'u_l1', courseId: 'c_pm4', learnerName: 'Aisha Learner',
-      programmeTitle: 'Project Management', nqfLevel: 4, credits: 136, saqaId: '50080',
-      issuedAt: new Date().toISOString(), certificateNo: 'EF-2026-DEMO01',
-    });
-    save(KEYS.certificates, certs, { silent: true });
   }
 }
 
@@ -198,7 +227,6 @@ export async function seedIfNeeded() {
   const hasUsers = !!load(KEYS.users, null);
 
   if (hasUsers) {
-    // Always restore/upgrade courses + mid-level data
     applyMidLevelData();
     if (ver < 10) save('ef_seed_ver', 10, { silent: true });
     ensurePitchDemoData();
@@ -217,3 +245,5 @@ export async function seedIfNeeded() {
   applyMidLevelData();
   save('ef_seed_ver', 10, { silent: true });
 }
+
+export { KEYS };
