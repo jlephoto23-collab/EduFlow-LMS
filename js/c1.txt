@@ -68,11 +68,11 @@ function renderCourseDetail(courseId) {
   lessons.forEach((l) => { if (getLessonStatus(courseId, l, learnerId).done) doneCount++; });
   const savedDocs = (s && s.id) ? load('ef_docs_' + s.id + '_' + courseId, {}) : {};
   const docs = [
-    { id: 'ann', title: 'Announcements', icon: 'bi-megaphone', done: !!savedDocs.ann },
-    { id: 'policy', title: 'Learner Policy Document', icon: 'bi-file-earmark-text', done: !!savedDocs.policy },
-    { id: 'id', title: 'ID Copy', icon: 'bi-person-vcard', done: !!savedDocs.id },
-    { id: 'matric', title: 'Highest Secondary Education Certificate', icon: 'bi-award', done: !!savedDocs.matric },
-    { id: 'cv', title: 'Curriculum Vitae', icon: 'bi-file-person', done: !!savedDocs.cv },
+    { id: 'ann', title: 'Announcements', icon: 'bi-megaphone', done: isDocDone(savedDocs.ann) },
+    { id: 'policy', title: 'Learner Policy Document', icon: 'bi-file-earmark-text', done: isDocDone(savedDocs.policy) },
+    { id: 'id', title: 'ID Copy', icon: 'bi-person-vcard', done: isDocDone(savedDocs.id) },
+    { id: 'matric', title: 'Highest Secondary Education Certificate', icon: 'bi-award', done: isDocDone(savedDocs.matric) },
+    { id: 'cv', title: 'Curriculum Vitae', icon: 'bi-file-person', done: isDocDone(savedDocs.cv) },
   ];
   const modules = [];
   const byNum = {};
@@ -97,7 +97,7 @@ function renderCourseDetail(courseId) {
   content().innerHTML = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-course"><i class="bi bi-arrow-left"></i> Back</button>
   <div class="course-hero"><h1>${escapeHtml(c.programme || c.title)}</h1><p class="mb-0 small opacity-75">NQF ${c.nqfLevel} · ${c.credits} credits · ${formatMoney(c.feeZAR)} · SAQA ${escapeHtml(c.saqaId || '')}</p></div>
   <div class="apex-card mb-3"><h3 class="apex-section-title">Course documents</h3>
-    <p class="text-secondary small mb-2">Open each item, follow the instructions, then tick the confirmation to mark Done.</p>
+    <p class="text-secondary small mb-2">Open each item. Upload required files (ID, Matric, CV), follow instructions, then mark Done.</p>
     ${docs.map((d) => `<div class="activity-row clickable" data-doc="${d.id}" role="button"><div class="activity-left"><i class="bi ${d.icon}"></i><span>${escapeHtml(d.title)}</span></div><span class="status-pill ${d.done?'status-done':'status-todo'}">${d.done?'✓ Done':'To do'}</span></div>`).join('')}
   </div>
   <div class="apex-card mb-3"><div class="d-flex justify-content-between mb-2"><h3 class="apex-section-title mb-0">Modules</h3><span class="text-secondary small">${doneCount}/${lessons.length}</span></div>
@@ -117,40 +117,130 @@ function renderCourseDetail(courseId) {
   });
 }
 
+function isDocDone(entry) {
+  if (!entry) return false;
+  if (entry === true) return true;
+  return !!(entry.done);
+}
+
+function getDocFile(entry) {
+  if (!entry || entry === true) return null;
+  return entry.file || null;
+}
+
 function openCourseDocument(courseId, docId) {
-  const titles = { ann: 'Announcements', policy: 'Learner Policy Document', id: 'ID Copy', matric: 'Matric certificate', cv: 'Curriculum Vitae' };
+  const titles = {
+    ann: 'Announcements',
+    policy: 'Learner Policy Document',
+    id: 'ID Copy',
+    matric: 'Highest Secondary Education Certificate',
+    cv: 'Curriculum Vitae',
+  };
   const bodies = {
     ann: 'Provider notices and class schedules appear here.\n\nInstruction: Read all announcements, then tick the box below to confirm.',
-    policy: '1. Mark attendance for every session.\n2. Submit assessments on time.\n3. Upload original documents only.\n4. Academic integrity is required.\n\nInstruction: Read each rule carefully. You may only mark Done after confirming you understand.',
-    id: 'Your ID / Smart ID copy is on file from your application.\n\nInstruction: Confirm that the ID on file is correct and current.',
-    matric: 'Your Matric (or equivalent) certificate is on file.\n\nInstruction: Confirm that the certificate on file is correct.',
-    cv: 'Keep your CV updated for workplace placement support.\n\nInstruction: Review the CV expectations, then confirm you have a current CV ready if requested.',
+    policy: '1. Mark attendance for every session.\n2. Submit assessments on time.\n3. Upload original documents only.\n4. Academic integrity is required.\n\nInstruction: Read each rule, then confirm you understand. You may optionally upload a signed policy acknowledgment.',
+    id: 'Upload a clear copy of your ID / Smart ID (PDF or image). This is required for your learner file.',
+    matric: 'Upload your Matric certificate or equivalent (PDF or image). This is required for your learner file.',
+    cv: 'Upload your current Curriculum Vitae (PDF or Word). Keep it updated for workplace placement support.',
   };
+  const requiresUpload = { id: true, matric: true, cv: true };
+  const optionalUpload = { policy: true };
+
   const s = getSession();
   const key = s ? ('ef_docs_' + s.id + '_' + courseId) : null;
-  const already = key ? !!(load(key, {})[docId]) : false;
+  const store = key ? load(key, {}) : {};
+  const entry = store[docId];
+  const already = isDocDone(entry);
+  const existingFile = getDocFile(entry);
+  const needsFile = !!requiresUpload[docId];
+  const canUpload = needsFile || !!optionalUpload[docId];
+
+  let fileBlock = '';
+  if (canUpload) {
+    fileBlock = `
+      <div class="content-block mb-3">
+        <p class="mb-2"><strong>${needsFile ? 'Required upload' : 'Optional upload'}</strong></p>
+        ${existingFile ? `<p class="mb-2 small">Current file: ${fileLinkHtml(existingFile)}</p>` : '<p class="text-secondary small mb-2">No file uploaded yet.</p>'}
+        <label class="form-label">Choose file (PDF, JPG, PNG${docId === 'cv' ? ', DOC/DOCX' : ''})</label>
+        <input type="file" id="doc-upload" class="form-control mb-2" accept=".pdf,.jpg,.jpeg,.png,image/*,application/pdf${docId === 'cv' ? ',.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document' : ''}">
+        <button type="button" class="btn btn-sm btn-outline-light" id="btn-doc-upload"><i class="bi bi-upload me-1"></i>${existingFile ? 'Replace file' : 'Upload file'}</button>
+        <span id="doc-upload-status" class="text-secondary small ms-2"></span>
+      </div>`;
+  }
+
   content().innerHTML = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-doc"><i class="bi bi-arrow-left"></i> Back</button>
-    <h2 class="page-title">${escapeHtml(titles[docId]||'Document')}</h2>
-    <div class="content-block mb-3">${formatBody(bodies[docId]||'')}</div>
-    ${already ? '<span class="badge-soft badge-ok">Already completed</span><button class="btn btn-outline-light w-100 mt-3" id="btn-back-doc2">Back to course</button>' : `
+    <h2 class="page-title">${escapeHtml(titles[docId] || 'Document')}</h2>
+    <div class="content-block mb-3">${formatBody(bodies[docId] || '')}</div>
+    ${fileBlock}
+    ${already ? `<span class="badge-soft badge-ok">Completed</span>
+      <button class="btn btn-outline-light w-100 mt-3" id="btn-back-doc2">Back to course</button>` : `
     <div class="form-check mb-3">
       <input class="form-check-input" type="checkbox" id="doc-ack">
-      <label class="form-check-label" for="doc-ack">I have read this document and followed the instructions</label>
+      <label class="form-check-label" for="doc-ack">${needsFile ? 'I confirm this is the correct document and I have uploaded the file' : 'I have read this document and followed the instructions'}</label>
     </div>
-    <div id="doc-error" class="alert alert-danger d-none py-2">Tick the box after you have read the instructions.</div>
+    <div id="doc-error" class="alert alert-danger d-none py-2"></div>
     <button class="btn btn-primary w-100" id="btn-doc-done" disabled>Mark as Done</button>`}`;
+
   document.getElementById('btn-back-doc')?.addEventListener('click', () => renderCourseDetail(courseId));
   document.getElementById('btn-back-doc2')?.addEventListener('click', () => renderCourseDetail(courseId));
-  const ack = document.getElementById('doc-ack');
-  const btn = document.getElementById('btn-doc-done');
-  ack?.addEventListener('change', () => { if (btn) btn.disabled = !ack.checked; });
-  btn?.addEventListener('click', () => {
-    if (!ack?.checked) {
-      const err = document.getElementById('doc-error');
-      if (err) err.classList.remove('d-none');
+
+  const refreshDoneEnabled = () => {
+    const btn = document.getElementById('btn-doc-done');
+    const ack = document.getElementById('doc-ack');
+    if (!btn || !ack) return;
+    const st = key ? load(key, {}) : {};
+    const hasFile = !!getDocFile(st[docId]);
+    btn.disabled = !(ack.checked && (!needsFile || hasFile));
+  };
+
+  document.getElementById('doc-ack')?.addEventListener('change', refreshDoneEnabled);
+
+  document.getElementById('btn-doc-upload')?.addEventListener('click', async () => {
+    const input = document.getElementById('doc-upload');
+    const status = document.getElementById('doc-upload-status');
+    if (!input?.files?.length) {
+      if (status) status.textContent = 'Choose a file first.';
       return;
     }
-    if (s && key) { const done = load(key, {}); done[docId] = true; save(key, done); }
+    if (status) status.textContent = 'Uploading…';
+    const fileRec = await readFilesFromInput(input, false);
+    if (!fileRec) {
+      if (status) status.textContent = 'Could not read file. Try a smaller PDF/image.';
+      return;
+    }
+    if (!s || !key) return;
+    const st = load(key, {});
+    const prev = st[docId];
+    st[docId] = {
+      done: isDocDone(prev),
+      file: fileRec,
+      uploadedAt: new Date().toISOString(),
+    };
+    save(key, st);
+    if (status) status.textContent = 'Uploaded: ' + (fileRec.name || 'file');
+    openCourseDocument(courseId, docId);
+  });
+
+  document.getElementById('btn-doc-done')?.addEventListener('click', () => {
+    const ack = document.getElementById('doc-ack');
+    const err = document.getElementById('doc-error');
+    if (!ack?.checked) {
+      if (err) { err.textContent = 'Tick the confirmation box first.'; err.classList.remove('d-none'); }
+      return;
+    }
+    if (!s || !key) return;
+    const st = load(key, {});
+    if (needsFile && !getDocFile(st[docId])) {
+      if (err) { err.textContent = 'Upload the required document before marking Done.'; err.classList.remove('d-none'); }
+      return;
+    }
+    const prev = st[docId];
+    st[docId] = {
+      done: true,
+      file: getDocFile(prev),
+      completedAt: new Date().toISOString(),
+    };
+    save(key, st);
     renderCourseDetail(courseId);
   });
 }
