@@ -1,1 +1,37 @@
-PLACEHOLDER
+function renderCatalog() {
+  const s = getSession();
+  const courses = getCourses();
+  content().innerHTML = '<h2 class="page-title">Courses</h2><p class="page-subtitle">Select a programme</p>' +
+    courses.map(c => `<div class="list-card list-link" data-id="${c.id}"><h3>${escapeHtml(c.programme||c.title)}</h3><p class="text-secondary small">NQF ${c.nqfLevel} · ${formatMoney(c.feeZAR)}</p></div>`).join('');
+  content().querySelectorAll('[data-id]').forEach(el => el.addEventListener('click', () => renderCourseDetail(el.dataset.id)));
+  focusPageHeading();
+}
+
+async function bootEduFlow() {
+  try { await seedIfNeeded(); } catch (e) { console.error(e); }
+  if (typeof enforceOneProgrammeRule === 'function') enforceOneProgrammeRule();
+  if (typeof wireThemeToggles === 'function') wireThemeToggles();
+  setTimeout(() => document.getElementById('splash')?.classList.add('hide'), 400);
+  document.getElementById('login-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const result = login(document.getElementById('email').value.trim(), document.getElementById('password').value);
+    const err = document.getElementById('login-error');
+    if (!result.ok) { if (err) { err.textContent = result.message; err.classList.remove('d-none'); } return; }
+    if (err) err.classList.add('d-none');
+    if (result.needsVerify) showVerifyPanel(result.user);
+    else if (result.needsApplication) showApplicationStep(result.user);
+    else if (result.pending) showAwaitingApproval();
+    else showApp();
+  });
+  document.getElementById('btn-register')?.addEventListener('click', (e) => { e.preventDefault(); showRegisterPanel(); });
+  document.getElementById('btn-show-login-from-reg')?.addEventListener('click', (e) => { e.preventDefault(); showLogin(); });
+  document.getElementById('btn-logout')?.addEventListener('click', logout);
+  document.getElementById('skip-to-content')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    const main = document.getElementById('content');
+    if (main) { main.setAttribute('tabindex', '-1'); main.focus(); announce('Main content'); }
+  });
+  if (getSession()) showApp(); else showLogin();
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bootEduFlow);
+else bootEduFlow();
