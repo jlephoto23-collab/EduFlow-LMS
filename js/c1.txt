@@ -84,6 +84,18 @@ function renderCourseDetail(courseId) {
   let doneCount = 0;
   lessons.forEach((l) => { if (getLessonStatus(courseId, l, learnerId).done) doneCount++; });
   const savedDocs = (s && s.id) ? load('ef_docs_' + s.id + '_' + courseId, {}) : {};
+  if (s && s.id) {
+    let fixed = false;
+    ['id', 'matric', 'cv'].forEach((docId) => {
+      const e = savedDocs[docId];
+      if (!e) return;
+      if (e === true || (e.done && !e.file)) {
+        delete savedDocs[docId];
+        fixed = true;
+      }
+    });
+    if (fixed) save('ef_docs_' + s.id + '_' + courseId, savedDocs, { silent: true });
+  }
   const docs = [
     { id: 'ann', title: 'Announcements', icon: 'bi-megaphone', done: isDocDone(savedDocs.ann, 'ann') },
     { id: 'policy', title: 'Learner Policy Document', icon: 'bi-file-earmark-text', done: isDocDone(savedDocs.policy, 'policy') },
@@ -107,8 +119,10 @@ function renderCourseDetail(courseId) {
   </div><div id="course-tab-body"></div>`;
   const renderOutline = () => {
     document.getElementById('course-tab-body').innerHTML = `
-  <div class="apex-card mb-3"><h3 class="apex-section-title">General</h3>
+  <div class="apex-card mb-3"><div class="d-flex justify-content-between align-items-center mb-2"><h3 class="apex-section-title mb-0">General</h3>
+    <button type="button" class="btn btn-sm btn-outline-light" id="btn-reset-docs" title="Clear checklist">Reset checklist</button></div>
     ${docs.map((d) => `<div class="activity-row clickable" data-doc="${d.id}" role="button"><div class="activity-left"><i class="bi ${d.icon}"></i><span>${escapeHtml(d.title)}</span></div><span class="status-pill ${d.done?'status-done':'status-todo'}">${d.done?'✓ Done':'To do'}</span></div>`).join('')}
+    <p class="text-secondary small mb-0 mt-2">ID, Matric and CV stay <strong>To do</strong> until you upload a file and mark Done.</p>
   </div>
   <div class="apex-card mb-3"><div class="d-flex justify-content-between mb-2"><h3 class="apex-section-title mb-0">Modules</h3><span class="text-secondary small">${doneCount}/${lessons.length}</span></div>
     ${modules.map((m, mi) => {
@@ -117,6 +131,13 @@ function renderCourseDetail(courseId) {
     }).join('')}</div>`;
     document.getElementById('course-tab-body').querySelectorAll('[data-module]').forEach((el) => el.addEventListener('click', () => renderModuleSection(courseId, modules[Number(el.getAttribute('data-module'))])));
     document.getElementById('course-tab-body').querySelectorAll('[data-doc]').forEach((el) => el.addEventListener('click', () => openCourseDocument(courseId, el.getAttribute('data-doc'))));
+    document.getElementById('btn-reset-docs')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!s || !s.id) return;
+      if (!confirm('Reset all General documents to To do?')) return;
+      save('ef_docs_' + s.id + '_' + courseId, {});
+      renderCourseDetail(courseId);
+    });
   };
   const renderGradesTab = () => {
     const rows = lessons.filter((l) => l.type === 'quiz' || l.type === 'assignment').map((l) => {
@@ -330,8 +351,7 @@ function showAssignmentSubmitForm(courseId, lesson, previous) {
     <p class="text-secondary small mb-2"><strong>Attempt ${attemptNo} of 2</strong>${isRemediation?' · Remediation':''}</p>
     <div class="content-block mb-3">${formatBody(lesson.body)}</div>
     <div class="content-block mb-3 small"><p class="mb-2"><strong>Instructions for upload</strong></p>
-      <ul class="mb-2"><li>Put your <strong>full name</strong> at the end of the file name${isRemediation?' (FullName - Remediation)':''}.</li>
-      <li>Example: <code>Knowledge_${sName}${isRemediation?'_Remediation':''}.pdf</code></li></ul>
+      <ul class="mb-2"><li>Put your <strong>full name</strong> at the end of the file name${isRemediation?' (FullName - Remediation)':''}.</li></ul>
       <p class="mb-0"><strong>Important:</strong> Altering the assessment = immediate Not Yet Competent.</p></div>
     <label class="form-label">Written response</label>
     <textarea class="form-control mb-3" id="assignment-text" rows="5">${previous?.text?escapeHtml(previous.text):''}</textarea>
@@ -341,7 +361,7 @@ function showAssignmentSubmitForm(courseId, lesson, previous) {
       <label class="form-label">Practical evidence</label>
       <input type="file" id="asg-practical" class="form-control mb-2" accept=".pdf,.jpg,.jpeg,.png,image/*,application/pdf">
       <p class="text-secondary small mb-0">At least one file required.</p></div>
-    <button class="btn btn-primary w-100" id="btn-submit-asg"><i class="bi bi-upload me-1"></i>${isRemediation?'Add a new attempt — upload remediation':'Upload and submit attempt '+attemptNo}</button>`;
+    <button class="btn btn-primary w-100" id="btn-submit-asg"><i class="bi bi-upload me-1"></i>${isRemediation?'Add a new attempt':'Upload and submit attempt '+attemptNo}</button>`;
   document.getElementById('btn-back-lesson')?.addEventListener('click', () => renderCourseDetail(courseId));
   document.getElementById('btn-submit-asg')?.addEventListener('click', async () => {
     const text = document.getElementById('assignment-text').value.trim();
@@ -370,7 +390,6 @@ function renderGrading() {
     (subs.length === 0 ? '<div class="empty">Nothing to grade</div>' : subs.map((sub) => {
       const learner = users.find((u) => u.id === sub.learnerId);
       return `<div class="list-card"><h3>${escapeHtml(learner?.name || 'Learner')}</h3><div class="content-block mb-2">${formatBody(sub.text)}</div>
-      <p class="small mb-1">Attempt ${sub.attemptNo||1} of 2</p>
       <input type="number" class="form-control mb-2" id="score-${sub.id}" min="0" max="100" value="70">
       <textarea class="form-control mb-2" id="fb-${sub.id}" rows="2" placeholder="Feedback"></textarea>
       <div class="d-flex gap-2"><button class="btn btn-sm btn-primary" data-grade="${sub.id}" data-outcome="competent">Competent</button>
