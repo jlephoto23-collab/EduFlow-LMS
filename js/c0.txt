@@ -24,6 +24,28 @@ function announce(message) {
   el.textContent = '';
   window.setTimeout(() => { el.textContent = String(message); }, 50);
 }
+
+/** Consistent page header: Back (+ optional Next) for secondary screens */
+function pageNavBar(opts) {
+  const backLabel = (opts && opts.backLabel) || 'Back';
+  const nextLabel = opts && opts.nextLabel;
+  let html = `<div class="page-nav d-flex align-items-center gap-2 mb-2">
+    <button type="button" class="btn btn-sm btn-outline-light" id="btn-page-back" aria-label="${escapeHtml(backLabel)}">
+      <i class="bi bi-arrow-left"></i> ${escapeHtml(backLabel)}
+    </button>`;
+  if (nextLabel) {
+    html += `<button type="button" class="btn btn-sm btn-primary ms-auto" id="btn-page-next" aria-label="${escapeHtml(nextLabel)}">
+      ${escapeHtml(nextLabel)} <i class="bi bi-arrow-right"></i>
+    </button>`;
+  }
+  html += `</div>`;
+  return html;
+}
+function wirePageNav(backFn, nextFn) {
+  document.getElementById('btn-page-back')?.addEventListener('click', (e) => { e.preventDefault(); backFn && backFn(); });
+  if (nextFn) document.getElementById('btn-page-next')?.addEventListener('click', (e) => { e.preventDefault(); nextFn(); });
+}
+
 function getSession() { return load(KEYS.session, null); }
 function setSession(u) { save(KEYS.session, u ? { id: u.id, name: u.name, email: u.email, role: u.role, gmail: u.gmail || u.email } : null); }
 function isStaff(s) { return s && (s.role === 'admin' || s.role === 'facilitator' || s.role === 'trainer'); }
@@ -233,6 +255,11 @@ function setNavActive(key) {
     else el.removeAttribute('aria-current');
   });
 }
+function goHome() {
+  const s = getSession();
+  setNavActive('home');
+  if (isStaff(s)) renderAdminHome(); else renderLearnerHome();
+}
 function renderBottomNav(s) {
   const nav = document.getElementById('bottom-nav');
   if (!nav) return;
@@ -317,7 +344,8 @@ function renderApprovals() {
   const pending = getEnrolments().filter((e) => e.status === 'pending');
   const users = load(KEYS.users, []);
   const courses = getCourses();
-  content().innerHTML = `<h2 class="page-title">Applications</h2>` +
+  content().innerHTML = pageNavBar({ backLabel: 'Back to Dashboard' }) +
+    `<h2 class="page-title">Applications</h2>` +
     (pending.length === 0 ? '<div class="empty">No pending applications</div>' : pending.map((e) => {
       const u = users.find((x) => x.id === e.learnerId);
       const c = courses.find((x) => x.id === e.courseId);
@@ -329,6 +357,7 @@ function renderApprovals() {
           <button class="btn btn-sm btn-outline-light" data-reject="${e.id}">Decline</button>
         </div></div>`;
     }).join(''));
+  wirePageNav(goHome);
   content().querySelectorAll('[data-approve]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const list = getEnrolments();
@@ -348,18 +377,22 @@ function renderApprovals() {
   focusPageHeading();
 }
 function renderAbout() {
-  content().innerHTML = `<h2 class="page-title">About EduFlow</h2>
+  content().innerHTML = pageNavBar({ backLabel: 'Back to Home' }) +
+    `<h2 class="page-title">About EduFlow</h2>
     <div class="content-block"><p>Mid-level LMS for training providers — applications, payments, live classes, assessments and certificates.</p>
     <p class="mb-0"><strong>Demo logins</strong><br>Admin: admin@eduflow.test / admin123<br>Learner: learner1@gmail.com / learner123</p></div>
     <button class="btn btn-outline-light w-100 mt-3" id="btn-logout-about">Sign out</button>`;
+  wirePageNav(goHome);
   document.getElementById('btn-logout-about')?.addEventListener('click', logout);
   focusPageHeading();
 }
 function renderCatalog() {
   const s = getSession();
   const courses = getCourses();
-  content().innerHTML = `<h2 class="page-title">Courses</h2><p class="page-subtitle">Select a programme</p>` +
+  content().innerHTML = pageNavBar({ backLabel: 'Back to Home' }) +
+    `<h2 class="page-title">${isStaff(s) ? 'Programmes' : 'Courses'}</h2><p class="page-subtitle">Select a programme</p>` +
     courses.map(c => `<div class="list-card list-link" data-id="${c.id}"><h3>${escapeHtml(c.programme||c.title)}</h3><p class="text-secondary small">NQF ${c.nqfLevel} · ${formatMoney(c.feeZAR)}</p></div>`).join('');
+  wirePageNav(goHome);
   content().querySelectorAll('[data-id]').forEach(el => el.addEventListener('click', () => renderCourseDetail(el.dataset.id)));
   focusPageHeading();
 }
@@ -369,11 +402,14 @@ function renderCourseDetail(courseId) {
   const s = getSession();
   const enr = getEnrolments().find(e => e.learnerId === s.id && e.courseId === courseId);
   const pay = getEnrolmentPaymentStatus(enr);
-  let html = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-course"><i class="bi bi-arrow-left"></i> Back</button>
-    <div class="course-hero"><h1>${escapeHtml(c.saqaId || '')} — ${escapeHtml(c.programme || c.title)}</h1>
+  const lessons = c.lessons || [];
+  let html = pageNavBar({ backLabel: 'Back to Programmes' }) +
+    `<div class="course-hero"><h1>${escapeHtml(c.saqaId || '')} — ${escapeHtml(c.programme || c.title)}</h1>
     <p class="mb-0">NQF ${c.nqfLevel} · ${c.credits || ''} credits · ${formatMoney(c.feeZAR)}</p></div>`;
   if (isStaff(s)) {
-    html += `<p class="text-secondary">Staff view of programme modules.</p>`;
+    html += `<p class="text-secondary">Staff view of programme modules.</p>` +
+      lessons.map((l, i) => `<div class="list-card list-link" data-lesson="${l.id}" data-idx="${i}"><h3>${escapeHtml(l.title)}</h3>
+      <span class="badge-soft">${escapeHtml(l.type || 'content')}</span></div>`).join('');
   } else if (!enr || enr.status !== 'approved') {
     html += `<div class="content-block"><p>You are not enrolled in this programme yet.</p>
       <button class="btn btn-primary" id="btn-apply-here">Apply with documents</button></div>`;
@@ -381,30 +417,46 @@ function renderCourseDetail(courseId) {
     html += `<div class="content-block"><p>Payment outstanding. Complete payment to unlock modules.</p>
       <button class="btn btn-primary" id="btn-pay-now">Go to Fees & Payment</button></div>`;
   } else {
-    html += (c.lessons || []).map(l => `<div class="list-card list-link" data-lesson="${l.id}"><h3>${escapeHtml(l.title)}</h3>
-      <span class="badge-soft">${escapeHtml(l.type)}</span></div>`).join('');
+    html += lessons.map((l, i) => `<div class="list-card list-link" data-lesson="${l.id}" data-idx="${i}"><h3>${escapeHtml(l.title)}</h3>
+      <span class="badge-soft">${escapeHtml(l.type || 'content')}</span></div>`).join('');
   }
   content().innerHTML = html;
-  document.getElementById('btn-back-course')?.addEventListener('click', renderCatalog);
+  wirePageNav(() => { renderCatalog(); setNavActive('courses'); });
   document.getElementById('btn-pay-now')?.addEventListener('click', () => { renderPayments(); setNavActive('payments'); });
   document.getElementById('btn-apply-here')?.addEventListener('click', () => showApplicationStep(s));
   content().querySelectorAll('[data-lesson]').forEach(el => {
-    el.addEventListener('click', () => openLesson(courseId, el.getAttribute('data-lesson')));
+    el.addEventListener('click', () => openLesson(courseId, el.getAttribute('data-lesson'), Number(el.getAttribute('data-idx') || 0)));
   });
   focusPageHeading();
 }
-function openLesson(courseId, lessonId) {
+function openLesson(courseId, lessonId, idx) {
   const c = getCourse(courseId);
-  const lesson = (c?.lessons || []).find(l => l.id === lessonId);
+  const lessons = c?.lessons || [];
+  const lesson = lessons.find(l => l.id === lessonId) || lessons[idx];
   if (!lesson) return renderCourseDetail(courseId);
-  content().innerHTML = `<button class="btn btn-sm btn-outline-light mb-2" id="btn-back-lesson"><i class="bi bi-arrow-left"></i> Back</button>
-    <h2 class="page-title">${escapeHtml(lesson.title)}</h2>
-    <div class="content-block">${formatBody(lesson.body)}</div>
-    <button class="btn btn-primary w-100 mt-3" id="btn-mark-done">Mark as Done</button>`;
-  document.getElementById('btn-back-lesson')?.addEventListener('click', () => renderCourseDetail(courseId));
+  const i = typeof idx === 'number' ? idx : lessons.findIndex(l => l.id === lessonId);
+  const hasPrev = i > 0;
+  const hasNext = i < lessons.length - 1;
+  content().innerHTML = pageNavBar({
+      backLabel: 'Back to course',
+      nextLabel: hasNext ? 'Next lesson' : null
+    }) +
+    `<h2 class="page-title">${escapeHtml(lesson.title)}</h2>
+    <p class="text-secondary small mb-2">Lesson ${i + 1} of ${lessons.length}</p>
+    <div class="content-block">${formatBody(lesson.body || 'Content for this lesson.')}</div>
+    <div class="d-flex gap-2 mt-3">
+      ${hasPrev ? '<button type="button" class="btn btn-outline-light" id="btn-prev-lesson"><i class="bi bi-arrow-left"></i> Previous</button>' : ''}
+      <button type="button" class="btn btn-primary ${hasPrev ? 'ms-auto' : 'w-100'}" id="btn-mark-done">Mark as Done</button>
+    </div>`;
+  wirePageNav(
+    () => renderCourseDetail(courseId),
+    hasNext ? () => openLesson(courseId, lessons[i + 1].id, i + 1) : null
+  );
+  document.getElementById('btn-prev-lesson')?.addEventListener('click', () => openLesson(courseId, lessons[i - 1].id, i - 1));
   document.getElementById('btn-mark-done')?.addEventListener('click', () => {
     announce('Marked as done');
-    renderCourseDetail(courseId);
+    if (hasNext) openLesson(courseId, lessons[i + 1].id, i + 1);
+    else renderCourseDetail(courseId);
   });
   focusPageHeading();
 }
@@ -412,7 +464,8 @@ function renderPayments() {
   const s = getSession();
   const approved = getApprovedEnrolments(s.id);
   const courses = getCourses();
-  content().innerHTML = `<h2 class="page-title">Fees & payments</h2>` +
+  content().innerHTML = pageNavBar({ backLabel: 'Back to Home' }) +
+    `<h2 class="page-title">Fees & payments</h2>` +
     (approved.length === 0 ? '<div class="empty">No approved programmes</div>' : approved.map(e => {
       const c = courses.find(x => x.id === e.courseId);
       const pay = getEnrolmentPaymentStatus(e);
@@ -420,6 +473,7 @@ function renderPayments() {
         <p>${formatMoney(c?.feeZAR)} · <span class="badge-soft ${pay==='paid'?'badge-ok':'badge-warn'}">${pay}</span></p>
         ${pay !== 'paid' ? `<button class="btn btn-sm btn-primary" data-pay="${e.courseId}">Pay now</button>` : ''}</div>`;
     }).join(''));
+  wirePageNav(goHome);
   content().querySelectorAll('[data-pay]').forEach(btn => {
     btn.addEventListener('click', () => {
       const courseId = btn.getAttribute('data-pay');
@@ -431,10 +485,14 @@ function renderPayments() {
   focusPageHeading();
 }
 function renderLiveSessions() {
-  content().innerHTML = `<h2 class="page-title">Live classes</h2><div class="empty">No upcoming sessions scheduled.</div>`;
+  content().innerHTML = pageNavBar({ backLabel: 'Back to Home' }) +
+    `<h2 class="page-title">Live classes</h2><div class="empty">No upcoming sessions scheduled.</div>`;
+  wirePageNav(goHome);
   focusPageHeading();
 }
 function renderGrading() {
-  content().innerHTML = `<h2 class="page-title">Grading</h2><div class="empty">No submissions waiting.</div>`;
+  content().innerHTML = pageNavBar({ backLabel: 'Back to Home' }) +
+    `<h2 class="page-title">Grading</h2><div class="empty">No submissions waiting.</div>`;
+  wirePageNav(goHome);
   focusPageHeading();
 }
