@@ -1,12 +1,3 @@
-function renderCatalog() {
-  const s = getSession();
-  const courses = getCourses();
-  content().innerHTML = '<h2 class="page-title">Courses</h2><p class="page-subtitle">Select a programme</p>' +
-    courses.map(c => `<div class="list-card list-link" data-id="${c.id}"><h3>${escapeHtml(c.programme||c.title)}</h3><p class="text-secondary small">NQF ${c.nqfLevel} · ${formatMoney(c.feeZAR)}</p></div>`).join('');
-  content().querySelectorAll('[data-id]').forEach(el => el.addEventListener('click', () => renderCourseDetail(el.dataset.id)));
-  focusPageHeading();
-}
-
 async function bootEduFlow() {
   try { await seedIfNeeded(); } catch (e) { console.error(e); }
   if (typeof enforceOneProgrammeRule === 'function') enforceOneProgrammeRule();
@@ -30,6 +21,26 @@ async function bootEduFlow() {
     e.preventDefault();
     const main = document.getElementById('content');
     if (main) { main.setAttribute('tabindex', '-1'); main.focus(); announce('Main content'); }
+  });
+  document.getElementById('apply-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const s = getSession();
+    if (!s) return;
+    const err = document.getElementById('apply-error');
+    try {
+      const programmeId = document.getElementById('apply-programme')?.value;
+      const idCopy = await readFilesFromInput(document.getElementById('apply-id'), false);
+      const matric = await readFilesFromInput(document.getElementById('apply-matric'), false);
+      const other = await readFilesFromInput(document.getElementById('apply-other'), true);
+      const hasDisability = !!document.getElementById('apply-disability')?.checked;
+      const disabilityNote = hasDisability ? await readFilesFromInput(document.getElementById('apply-note'), false) : null;
+      const notes = document.getElementById('apply-notes')?.value || '';
+      const result = submitApplicationForUser(s.id, { programmeId, notes, documents: { idCopy, matric, other, hasDisability, disabilityNote } });
+      if (!result.ok) { if (err) { err.textContent = result.message; err.classList.remove('d-none'); } return; }
+      showAwaitingApproval();
+    } catch (ex) {
+      if (err) { err.textContent = 'Could not read files.'; err.classList.remove('d-none'); }
+    }
   });
   if (getSession()) showApp(); else showLogin();
 }
