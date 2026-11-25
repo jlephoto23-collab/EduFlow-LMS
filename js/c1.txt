@@ -1,3 +1,175 @@
+/** Attendance helpers — override seed markAttendance with status */
+function markAttendance(learnerId, courseId) {
+  const list = getAttendance();
+  const day = todayISODate();
+  const existing = list.find((a) => a.learnerId === learnerId && a.courseId === courseId && a.date === day);
+  if (existing) return existing;
+  const row = {
+    id: uid(),
+    learnerId,
+    courseId,
+    date: day,
+    at: new Date().toISOString(),
+    status: 'signed', // signed | approved
+    signedName: null,
+  };
+  list.unshift(row);
+  save(KEYS.attendance, list);
+  return row;
+}
+function signRegister(learnerId, courseId, signedName) {
+  const list = getAttendance();
+  const day = todayISODate();
+  let row = list.find((a) => a.learnerId === learnerId && a.courseId === courseId && a.date === day);
+  if (row) {
+    if (row.status === 'approved') return { ok: false, message: 'Already approved for today.' };
+    row.signedName = signedName || row.signedName;
+    row.at = new Date().toISOString();
+    row.status = 'signed';
+  } else {
+    row = {
+      id: uid(),
+      learnerId,
+      courseId,
+      date: day,
+      at: new Date().toISOString(),
+      status: 'signed',
+      signedName: signedName || '',
+    };
+    list.unshift(row);
+  }
+  save(KEYS.attendance, list);
+  return { ok: true, row };
+}
+function approveAttendance(attendanceId) {
+  const list = getAttendance();
+  const row = list.find((a) => a.id === attendanceId);
+  if (!row) return { ok: false, message: 'Record not found.' };
+  row.status = 'approved';
+  row.approvedAt = new Date().toISOString();
+  const s = getSession();
+  row.approvedBy = s ? s.id : null;
+  save(KEYS.attendance, list);
+  return { ok: true, row };
+}
+function saveAttendanceList(list) { save(KEYS.attendance, list); }
+
+/** Live tab = attendance register */
+function renderLiveSessions() {
+  const s = getSession();
+  if (!s) return showLogin();
+  const day = todayISODate();
+  const courses = getCourses();
+  const users = load(KEYS.users, []);
+
+  if (isStaff(s)) {
+    // Facilitator / admin: review & approve today's sign-ins
+    const todayRows = getAttendance().filter((a) => a.date === day);
+    const pending = todayRows.filter((a) => a.status !== 'approved');
+    const approved = todayRows.filter((a) => a.status === 'approved');
+
+    let html = pageNavBar({ backLabel: 'Back to Home' }) +
+      `<h2 class="page-title">Attendance register</h2>
+      <p class="page-subtitle">Today · ${escapeHtml(day)} · Approve learner sign-ins</p>`;
+
+    if (!todayRows.length) {
+      html += `<div class="empty">No learners have signed the register yet today.</div>`;
+    } else {
+      if (pending.length) {
+        html += `<h3 class="h6 mt-2 mb-2">Awaiting approval (${pending.length})</h3>`;
+        pending.forEach((a) => {
+          const u = users.find((x) => x.id === a.learnerId);
+          const c = courses.find((x) => x.id === a.courseId);
+          const time = a.at ? new Date(a.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+          html += `<div class="list-card">
+            <h3>${escapeHtml(u?.name || 'Learner')}</h3>
+            <p class="text-secondary small mb-1">${escapeHtml(c?.programme || c?.title || a.courseId)} · signed ${escapeHtml(time)}</p>
+            <p class="small mb-2">Signature: <strong>${escapeHtml(a.signedName || u?.name || '—')}</strong></p>
+            <button type="button" class="btn btn-sm btn-primary" data-approve-att="${a.id}">Approve attendance</button>
+          </div>`;
+        });
+      }
+      if (approved.length) {
+        html += `<h3 class="h6 mt-3 mb-2">Approved today (${approved.length})</h3>`;
+        approved.forEach((a) => {
+          const u = users.find((x) => x.id === a.learnerId);
+          const c = courses.find((x) => x.id === a.courseId);
+          html += `<div class="list-card">
+            <h3>${escapeHtml(u?.name || 'Learner')} <span class="badge-soft badge-ok">Approved</span></h3>
+            <p class="text-secondary small mb-0">${escapeHtml(c?.programme || '')} · ${escapeHtml(a.signedName || '')}</p>
+          </div>`;
+        });
+      }
+    }
+
+    content().innerHTML = html;
+    wirePageNav(goHome);
+    content().querySelectorAll('[data-approve-att]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const r = approveAttendance(btn.getAttribute('data-approve-att'));
+        if (r.ok) announce('Attendance approved');
+        else announce(r.message || 'Could not approve');
+        renderLiveSessions();
+      });
+    });
+    focusPageHeading();
+    return;
+  }
+
+  // Learner: sign register for approved programmes
+  const approved = getApprovedEnrolments(s.id);
+  let html = pageNavBar({ backLabel: 'Back to Home' }) +
+    `<h2 class="page-title">Attendance register</h2>
+    <p class="page-subtitle">Sign for today · ${escapeHtml(day)}</p>`;
+
+  if (!approved.length) {
+    html += `<div class="empty">You need an approved programme before you can sign the register.</div>`;
+    content().innerHTML = html;
+    wirePageNav(goHome);
+    focusPageHeading();
+    return;
+  }
+
+  const att = getAttendance();
+  approved.forEach((e) => {
+    const c = courses.find((x) => x.id === e.courseId);
+    const today = att.find((a) => a.learnerId === s.id && a.courseId === e.courseId && a.date === day);
+    const status = today?.status;
+    html += `<div class="list-card">
+      <h3>${escapeHtml(c?.programme || c?.title || 'Programme')}</h3>`;
+    if (status === 'approved') {
+      html += `<p class="mb-0"><span class="badge-soft badge-ok">Approved</span> · Signed as ${escapeHtml(today.signedName || s.name || '')}</p>`;
+    } else if (status === 'signed') {
+      html += `<p class="mb-2"><span class="badge-soft badge-warn">Signed — awaiting facilitator</span></p>
+        <p class="small text-secondary mb-0">You signed as ${escapeHtml(today.signedName || s.name || '')}. A facilitator will approve.</p>`;
+    } else {
+      html += `<label class="form-label">Full name (signature)</label>
+        <input type="text" class="form-control mb-2" id="sign-name-${e.courseId}" value="${escapeHtml(s.name || '')}" required>
+        <button type="button" class="btn btn-primary" data-sign="${e.courseId}">Sign register</button>`;
+    }
+    html += `</div>`;
+  });
+
+  content().innerHTML = html;
+  wirePageNav(goHome);
+  content().querySelectorAll('[data-sign]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const courseId = btn.getAttribute('data-sign');
+      const input = document.getElementById('sign-name-' + courseId);
+      const name = (input?.value || '').trim();
+      if (!name) {
+        announce('Enter your full name to sign');
+        return;
+      }
+      const r = signRegister(s.id, courseId, name);
+      if (r.ok) announce('Register signed for today');
+      else announce(r.message || 'Could not sign');
+      renderLiveSessions();
+    });
+  });
+  focusPageHeading();
+}
+
 async function bootEduFlow() {
   try { await seedIfNeeded(); } catch (e) { console.error(e); }
   if (typeof enforceOneProgrammeRule === 'function') enforceOneProgrammeRule();
