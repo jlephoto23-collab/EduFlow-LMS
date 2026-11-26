@@ -2,20 +2,34 @@
 
 function showView(viewId) {
   document.querySelectorAll('.view').forEach((el) => {
-    el.classList.toggle('is-active', el.id === viewId);
+    const active = el.id === viewId;
+    el.classList.toggle('is-active', active);
+    if (active) {
+      el.removeAttribute('hidden');
+      el.removeAttribute('inert');
+      el.setAttribute('aria-hidden', 'false');
+    } else {
+      el.setAttribute('hidden', '');
+      el.setAttribute('inert', '');
+      el.setAttribute('aria-hidden', 'true');
+    }
   });
   const signedIn = viewId === 'view-workspace';
   document.getElementById('btn-logout')?.classList.toggle('d-none', !signedIn);
   document.getElementById('user-chip')?.classList.toggle('d-none', !signedIn);
-  const sub = document.getElementById('brand-sub');
-  if (sub) sub.textContent = signedIn
-    ? 'Workspace'
-    : 'Skills development · Enrol · Learn · Assess';
   try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (_) { window.scrollTo(0, 0); }
+
+  // Move document title focus for a11y: one logical screen
+  const active = document.getElementById(viewId);
+  const heading = active?.querySelector('h1, h2.view-title, .view-title');
+  if (heading) {
+    if (!heading.hasAttribute('tabindex')) heading.setAttribute('tabindex', '-1');
+    try { heading.focus({ preventScroll: true }); } catch (_) {}
+  }
 }
 
 function goToVerifyStep(emailValue, user) {
-  const cleanEmail = (emailValue || user?.email || getSession()?.email || '').trim() || 'your email';
+  const cleanEmail = String(emailValue || user?.email || getSession()?.email || '').trim() || 'your email';
   const target = document.getElementById('verifyEmailDisplay');
   if (target) target.textContent = cleanEmail;
   const legacy = document.getElementById('verify-email-label');
@@ -35,6 +49,8 @@ function goToVerifyStep(emailValue, user) {
 
 function showLogin() {
   try { setSession(null); } catch (_) {}
+  // Kill any splash leftovers
+  document.getElementById('splash')?.classList.add('hide');
   showView('view-signin');
 }
 
@@ -48,7 +64,7 @@ function showVerifyPanel(user) {
 
 function showApplicationStep(user, preferredCourseId) {
   const sel = document.getElementById('apply-programme');
-  if (sel) {
+  if (sel && typeof getCourses === 'function') {
     sel.innerHTML = getCourses().map((c) =>
       '<option value="' + c.id + '"' + (preferredCourseId && c.id === preferredCourseId ? ' selected' : '') + '>' +
       escapeHtml(c.programme || c.title) + '</option>'
@@ -59,6 +75,7 @@ function showApplicationStep(user, preferredCourseId) {
 
 function showApp() {
   try { if (typeof ensureDemoEnrolments === 'function') ensureDemoEnrolments(); } catch (_) {}
+  document.getElementById('splash')?.classList.add('hide');
   let s = getSession();
   if (!s) return showLogin();
   const fresh = load(KEYS.users, []).find((u) => u.id === s.id || String(u.email).toLowerCase() === String(s.email || '').toLowerCase());
@@ -78,6 +95,9 @@ function showApp() {
 
 function wireDemoFills() {
   document.querySelectorAll('.demo-fill').forEach((btn) => {
+    // avoid double-binding
+    if (btn.dataset.wired === '1') return;
+    btn.dataset.wired = '1';
     btn.addEventListener('click', () => {
       const email = btn.getAttribute('data-email') || '';
       const pass = btn.getAttribute('data-pass') || '';
@@ -89,37 +109,40 @@ function wireDemoFills() {
       document.querySelectorAll('.demo-fill').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
       const status = document.getElementById('demo-fill-status');
-      if (status) status.textContent = 'Filled ' + role + ' — ' + email + ' (press Sign in)';
-      if (typeof announce === 'function') announce('Filled ' + role + ' credentials');
+      if (status) status.textContent = '✓ ' + role + ' credentials filled — press Sign in';
+      if (typeof announce === 'function') announce(role + ' credentials filled');
       e?.focus();
     });
   });
 }
 
 function wireOnboardingForms() {
-  document.getElementById('btn-register')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    showRegisterPanel();
-  });
-  document.getElementById('btn-show-login-from-reg')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    showLogin();
-  });
-  document.getElementById('btn-show-login-from-verify')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    showLogin();
-  });
-  document.getElementById('btn-show-login')?.addEventListener('click', (e) => {
+  const once = (id, evt, fn) => {
+    const el = document.getElementById(id);
+    if (!el || el.dataset['wired' + evt] === '1') return;
+    el.dataset['wired' + evt] = '1';
+    el.addEventListener(evt, fn);
+  };
+
+  once('btn-register', 'click', (e) => { e.preventDefault(); showRegisterPanel(); });
+  once('btn-show-login-from-reg', 'click', (e) => { e.preventDefault(); showLogin(); });
+  once('btn-show-login-from-verify', 'click', (e) => { e.preventDefault(); showLogin(); });
+  once('btn-show-login', 'click', (e) => {
     e.preventDefault();
     if (typeof logout === 'function') logout();
     else showLogin();
   });
 
-  document.getElementById('register-form')?.addEventListener('submit', (e) => {
+  once('register-form', 'submit', (e) => {
     e.preventDefault();
     const err = document.getElementById('reg-error');
+    const email = document.getElementById('reg-email')?.value?.trim() || '';
     const password = document.getElementById('reg-password')?.value || '';
     const password2 = document.getElementById('reg-password2')?.value || '';
+    if (!email) {
+      if (err) { err.textContent = 'Enter your email address.'; err.classList.remove('d-none'); }
+      return;
+    }
     if (password !== password2) {
       if (err) { err.textContent = 'Passwords do not match.'; err.classList.remove('d-none'); }
       return;
@@ -130,7 +153,7 @@ function wireOnboardingForms() {
     }
     const result = createLearnerAccount({
       name: document.getElementById('reg-name')?.value?.trim(),
-      email: document.getElementById('reg-email')?.value?.trim(),
+      email,
       phone: document.getElementById('reg-phone')?.value?.trim(),
       password,
       password2,
@@ -140,10 +163,11 @@ function wireOnboardingForms() {
       return;
     }
     if (err) err.classList.add('d-none');
-    goToVerifyStep(result.user?.email, result.user);
+    // Always pass the typed email so Step 2 is never a blank/generic string when known
+    goToVerifyStep(email, result.user);
   });
 
-  document.getElementById('verify-form')?.addEventListener('submit', (e) => {
+  once('verify-form', 'submit', (e) => {
     e.preventDefault();
     const s = getSession();
     const err = document.getElementById('verify-error');
@@ -161,7 +185,7 @@ function wireOnboardingForms() {
     showApplicationStep(result.user);
   });
 
-  document.getElementById('btn-resend-code')?.addEventListener('click', (e) => {
+  once('btn-resend-code', 'click', (e) => {
     e.preventDefault();
     const s = getSession();
     if (!s) return showLogin();
@@ -176,30 +200,48 @@ function wireOnboardingForms() {
     }
   });
 
-  document.getElementById('apply-form')?.addEventListener('submit', (e) => {
-    const err = document.getElementById('apply-error');
-    const max = 1.5 * 1024 * 1024;
-    const files = ['apply-id', 'apply-matric', 'apply-note'].map((id) => document.getElementById(id)?.files?.[0]).filter(Boolean);
-    for (const f of files) {
-      if (f.size > max) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        if (err) {
-          err.textContent = '"' + f.name + '" is larger than 1.5 MB. Please upload a smaller file.';
-          err.classList.remove('d-none');
+  const applyForm = document.getElementById('apply-form');
+  if (applyForm && applyForm.dataset.wiredSize !== '1') {
+    applyForm.dataset.wiredSize = '1';
+    applyForm.addEventListener('submit', (e) => {
+      const err = document.getElementById('apply-error');
+      const max = 1.5 * 1024 * 1024;
+      const files = ['apply-id', 'apply-matric', 'apply-note']
+        .map((id) => document.getElementById(id)?.files?.[0])
+        .filter(Boolean);
+      for (const f of files) {
+        if (f.size > max) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          if (err) {
+            err.textContent = '"' + f.name + '" is larger than 1.5 MB. Please upload a smaller file.';
+            err.classList.remove('d-none');
+          }
+          return;
         }
-        return;
       }
-    }
-  }, true);
+    }, true);
+  }
 
   wireDemoFills();
 }
 
-(function bootViews() {
+// Initial isolation before any other boot UI runs
+(function initViews() {
+  document.querySelectorAll('.view').forEach((el) => {
+    if (!el.classList.contains('is-active')) {
+      el.setAttribute('hidden', '');
+      el.setAttribute('inert', '');
+      el.setAttribute('aria-hidden', 'true');
+    }
+  });
   const run = () => { try { wireOnboardingForms(); } catch (err) { console.error(err); } };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run);
   else run();
   setTimeout(run, 50);
-  setTimeout(run, 200);
+  setTimeout(run, 250);
+  // After modules define login handlers, force the sign-in view once
+  setTimeout(() => {
+    if (!getSession()) showView('view-signin');
+  }, 300);
 })();
