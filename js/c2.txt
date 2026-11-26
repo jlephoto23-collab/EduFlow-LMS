@@ -1,4 +1,165 @@
-/** Advanced grading rubric + polished progress bars (loads after c1) */
+/** Advanced grading rubric + enrolment repair + access fixes (loads after c1) */
+
+/** Force demo learner Aisha onto approved+paid Project Management */
+function ensureDemoEnrolments() {
+  const users = load(KEYS.users, []);
+  let usersChanged = false;
+  const need = [
+    { id: 'u_admin', name: 'Admin Trainer', email: 'admin@eduflow.test', password: 'admin123', role: 'admin', status: 'approved' },
+    { id: 'u_facil', name: 'Facilitator Demo', email: 'facilitator@eduflow.test', password: 'facil123', role: 'facilitator', status: 'approved' },
+    { id: 'u_l1', name: 'Aisha Learner', email: 'learner1@gmail.com', password: 'learner123', role: 'learner', status: 'approved' },
+    { id: 'u_pend', name: 'Thabo Applicant', email: 'thabo.apply@gmail.com', password: 'pending123', role: 'learner', status: 'pending' },
+  ];
+  need.forEach((n) => {
+    let u = users.find((x) => String(x.email).toLowerCase() === n.email.toLowerCase());
+    if (!u) {
+      users.push({ ...n, gmail: n.email, emailVerified: true });
+      usersChanged = true;
+    } else {
+      // Keep stable id for Aisha so enrolments match session
+      if (n.email === 'learner1@gmail.com') {
+        if (u.id !== 'u_l1') { u.id = 'u_l1'; usersChanged = true; }
+        if (u.status !== 'approved') { u.status = 'approved'; usersChanged = true; }
+        if (u.password !== 'learner123') { u.password = 'learner123'; usersChanged = true; }
+        u.emailVerified = true;
+        u.role = 'learner';
+      }
+      if (n.email === 'admin@eduflow.test' && u.role !== 'admin') { u.role = 'admin'; u.status = 'approved'; usersChanged = true; }
+    }
+  });
+  if (usersChanged) save(KEYS.users, users);
+
+  const aisha = users.find((u) => String(u.email).toLowerCase() === 'learner1@gmail.com') || users.find((u) => u.id === 'u_l1');
+  if (!aisha) return;
+
+  const list = getEnrolments();
+  let enrChanged = false;
+  // Migrate any enrolment rows that pointed at old Aisha ids
+  list.forEach((e) => {
+    const learner = users.find((u) => u.id === e.learnerId);
+    if (!learner && e.learnerId && e.courseId === 'c_pm4') {
+      // orphaned row — retarget to Aisha if it looks like demo
+    }
+  });
+  let row = list.find((e) => e.courseId === 'c_pm4' && (e.learnerId === aisha.id || e.learnerId === 'u_l1'));
+  if (!row) {
+    list.push({
+      id: 'enr1',
+      learnerId: aisha.id,
+      courseId: 'c_pm4',
+      status: 'approved',
+      paymentStatus: 'paid',
+      enrolledAt: new Date().toISOString(),
+    });
+    enrChanged = true;
+  } else {
+    if (row.learnerId !== aisha.id) { row.learnerId = aisha.id; enrChanged = true; }
+    if (row.status !== 'approved') { row.status = 'approved'; enrChanged = true; }
+    if (row.paymentStatus !== 'paid') { row.paymentStatus = 'paid'; enrChanged = true; }
+  }
+  if (enrChanged) saveEnrolments(list);
+
+  // Sync session if logged in as Aisha with wrong id
+  const sess = getSession();
+  if (sess && String(sess.email).toLowerCase() === 'learner1@gmail.com' && sess.id !== aisha.id) {
+    setSession(aisha);
+  }
+}
+
+/** Login: approved enrolment wins over stale pending user.status */
+function login(email, password) {
+  try { ensureDemoEnrolments(); } catch (_) {}
+  const users = load(KEYS.users, []);
+  const user = users.find((u) => String(u.email).toLowerCase() === String(email).toLowerCase() && u.password === password);
+  if (!user) return { ok: false, message: 'Invalid email or password.' };
+  setSession(user);
+  if (user.role === 'learner') {
+    if (user.status === 'unverified' || user.emailVerified === false) return { ok: true, needsVerify: true, user };
+    const enr = getEnrolments().filter((e) => e.learnerId === user.id);
+    const hasApproved = enr.some((e) => e.status === 'approved');
+    if (hasApproved) return { ok: true, user };
+    if (!enr.length && user.status !== 'approved') return { ok: true, needsApplication: true, user };
+    if (enr.length && enr.every((e) => e.status === 'pending')) return { ok: true, pending: true, user };
+    if (user.status === 'pending' && !hasApproved) return { ok: true, pending: true, user };
+  }
+  return { ok: true, user };
+}
+
+/** Course detail: resolve enrolment by learner id; repair Aisha on the fly */
+function renderCourseDetail(courseId) {
+  try { ensureDemoEnrolments(); } catch (_) {}
+  const c = getCourse(courseId);
+  if (!c) return renderCatalog();
+  let s = getSession();
+  if (!s) return showLogin();
+  // Refresh session user from store (id may have been repaired)
+  const fresh = load(KEYS.users, []).find((u) => u.id === s.id || String(u.email).toLowerCase() === String(s.email || '').toLowerCase());
+  if (fresh) { s = fresh; setSession(fresh); }
+
+  let enr = getEnrolments().find((e) => e.learnerId === s.id && e.courseId === courseId);
+  // Fallback: demo Aisha + PM
+  if (!enr && String(s.email).toLowerCase() === 'learner1@gmail.com' && courseId === 'c_pm4') {
+    ensureDemoEnrolments();
+    enr = getEnrolments().find((e) => e.learnerId === s.id && e.courseId === courseId)
+      || getEnrolments().find((e) => e.learnerId === 'u_l1' && e.courseId === courseId);
+  }
+  const pay = getEnrolmentPaymentStatus(enr);
+  const lessons = c.lessons || [];
+  let html = pageNavBar({ backLabel: 'Back to Programmes' }) +
+    `<div class="course-hero"><h1>${escapeHtml(c.saqaId || '')} — ${escapeHtml(c.programme || c.title)}</h1>
+    <p class="mb-0">NQF ${c.nqfLevel} · ${c.credits || ''} credits · ${formatMoney(c.feeZAR)}</p></div>`;
+
+  if (isStaff(s)) {
+    html += `<p class="text-secondary">Staff view of programme modules.</p>` +
+      lessons.map((l, i) => `<div class="list-card list-link" data-lesson="${l.id}" data-idx="${i}"><h3>${escapeHtml(l.title)}</h3><span class="badge-soft">${escapeHtml(l.type || 'content')}</span></div>`).join('');
+  } else if (!enr || enr.status !== 'approved') {
+    html += `<div class="content-block"><p>You are not enrolled in this programme yet.</p>
+      <p class="small text-secondary">If you already applied, wait for admin approval — or use the demo learner account (learner1@gmail.com).</p>
+      <button type="button" class="btn btn-primary" id="btn-apply-here">Apply with documents</button></div>`;
+  } else if (pay !== 'paid') {
+    html += `<div class="content-block"><p>Payment outstanding. Complete payment to unlock modules.</p>
+      <button type="button" class="btn btn-primary" id="btn-pay-now">Go to Fees & Payment</button></div>`;
+  } else {
+    html += lessons.map((l, i) => {
+      const done = typeof isLessonDone === 'function' ? isLessonDone(s.id, courseId, l.id) : false;
+      return `<div class="list-card list-link" data-lesson="${l.id}" data-idx="${i}">
+        <h3>${escapeHtml(l.title)}</h3>
+        <span class="badge-soft">${escapeHtml(l.type || 'content')}</span>
+        ${done ? ' <span class="badge-soft badge-ok">Done</span>' : ''}
+      </div>`;
+    }).join('');
+  }
+  content().innerHTML = html;
+  wirePageNav(() => { renderCatalog(); setNavActive('courses'); });
+  document.getElementById('btn-pay-now')?.addEventListener('click', () => { renderPayments(); setNavActive('payments'); });
+  document.getElementById('btn-apply-here')?.addEventListener('click', () => {
+    if (typeof renderApplyInApp === 'function') renderApplyInApp(courseId);
+    else if (typeof showApplicationStep === 'function') showApplicationStep(s, courseId);
+  });
+  content().querySelectorAll('[data-lesson]').forEach((el) => {
+    el.addEventListener('click', () => openLesson(courseId, el.getAttribute('data-lesson'), Number(el.getAttribute('data-idx') || 0)));
+  });
+  focusPageHeading();
+}
+
+function showApp() {
+  try { ensureDemoEnrolments(); } catch (_) {}
+  const s = getSession();
+  if (!s) return showLogin();
+  // Re-bind session to store user (stable ids)
+  const fresh = load(KEYS.users, []).find((u) => u.id === s.id || String(u.email).toLowerCase() === String(s.email || '').toLowerCase());
+  if (fresh) setSession(fresh);
+  const sess = getSession();
+  document.getElementById('login-view')?.classList.add('d-none');
+  document.getElementById('app-view')?.classList.remove('d-none');
+  const chip = document.getElementById('user-chip');
+  if (chip) chip.textContent = (sess.name || sess.email) + ' · ' + (sess.role || '');
+  renderBottomNav(sess);
+  if (isStaff(sess)) renderAdminHome(); else renderLearnerHome();
+  setNavActive('home');
+  focusPageHeading();
+}
+
 function renderGrading() {
   const s = getSession();
   if (!isStaff(s)) {
@@ -109,11 +270,11 @@ function renderGrading() {
   focusPageHeading();
 }
 
-/* Progress bar class on learner home */
 (function patchLearnerHomeProgress() {
   const orig = renderLearnerHome;
   if (typeof orig !== 'function') return;
   renderLearnerHome = function () {
+    try { ensureDemoEnrolments(); } catch (_) {}
     orig();
     content().querySelectorAll('[data-open]').forEach((card) => {
       const bar = card.querySelector('div[style*="height:8px"]');
