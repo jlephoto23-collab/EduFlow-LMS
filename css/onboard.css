@@ -1,0 +1,30 @@
+/* Onboarding / hierarchy polish */
+.login-topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem}
+.login-topbar-brand{display:flex;align-items:center;gap:.45rem}
+.brand-mark{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,var(--primary),#8b5cf6);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:.85rem}
+.brand-mark.sm{width:24px;height:24px;font-size:.75rem;border-radius:7px}
+.login-hero{margin-bottom:1rem}
+.login-headline{font-size:1.45rem;font-weight:800;letter-spacing:-.03em;margin:0 0 .4rem;line-height:1.2}
+.login-value{color:var(--muted);font-size:.95rem;margin:0 0 .25rem;line-height:1.45}
+.auth-panel{animation:authIn .2s ease}
+@keyframes authIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.panel-title{font-size:1.2rem;font-weight:800;margin:0 0 .25rem;letter-spacing:-.02em}
+.panel-sub{color:var(--muted);font-size:.9rem;margin:0 0 1rem}
+.step-pill{display:inline-block;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--primary);background:var(--primary-soft);border:1px solid rgba(59,130,246,.25);padding:.2rem .55rem;border-radius:999px;margin:0 0 .5rem}
+.field-group{margin-bottom:.85rem}
+.field-hint{font-size:.78rem;color:var(--muted);margin:0 0 .65rem}
+.form-section{margin-bottom:1.15rem;padding-bottom:.35rem;border-bottom:1px solid var(--border)}
+.form-section:last-of-type{border-bottom:0}
+.form-section-title{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:.55rem}
+.auth-link{color:#93c5fd;text-decoration:none;font-size:.9rem}
+.auth-link:hover{text-decoration:underline}
+.demo-sandbox{background:var(--card);border:1px dashed rgba(245,158,11,.45);border-radius:var(--radius-sm);padding:.85rem 1rem}
+.demo-sandbox-head{display:flex;align-items:center;justify-content:space-between;gap:.5rem;flex-wrap:wrap;margin-bottom:.35rem}
+.demo-sandbox-note{font-size:.72rem;color:var(--muted)}
+.demo-fill-grid{display:grid;grid-template-columns:1fr 1fr;gap:.4rem}
+.install-card{background:transparent;border:0;padding:0}
+.install-hint{font-size:.75rem;color:var(--muted);text-align:center;line-height:1.4}
+.popia-note{font-size:.78rem;color:var(--muted);background:var(--card-2);border:1px solid var(--border);border-radius:10px;padding:.65rem .75rem;margin:.5rem 0 .75rem;line-height:1.45}
+.badge-pending{background:rgba(148,163,184,.15);color:var(--muted);border-color:rgba(148,163,184,.3)}
+.badge-role{font-size:.68rem;text-transform:uppercase;letter-spacing:.04em}
+@media (min-width:768px){.login-headline{font-size:1.6rem}.install-hint{opacity:.85}}
