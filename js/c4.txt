@@ -1,0 +1,151 @@
+/** Onboarding UX: panel switching, verify email label, demo fills, register/verify forms */
+
+function hideAllAuthPanels() {
+  ['login-panel', 'register-panel', 'verify-panel', 'apply-panel'].forEach((id) => {
+    document.getElementById(id)?.classList.add('d-none');
+  });
+  const pitch = document.getElementById('pitch-strip');
+  if (pitch) pitch.classList.remove('d-none');
+}
+
+function showLogin() {
+  document.getElementById('app-view')?.classList.add('d-none');
+  document.getElementById('login-view')?.classList.remove('d-none');
+  hideAllAuthPanels();
+  document.getElementById('login-panel')?.classList.remove('d-none');
+}
+
+function showRegisterPanel() {
+  hideAllAuthPanels();
+  document.getElementById('register-panel')?.classList.remove('d-none');
+  document.getElementById('pitch-strip')?.classList.add('d-none');
+}
+
+function showVerifyPanel(user) {
+  hideAllAuthPanels();
+  document.getElementById('verify-panel')?.classList.remove('d-none');
+  document.getElementById('pitch-strip')?.classList.add('d-none');
+  const email = user?.email || getSession()?.email || '';
+  const label = document.getElementById('verify-email-label');
+  if (label) label.textContent = email || 'your email';
+  const demo = document.getElementById('verify-demo-code');
+  if (demo) {
+    if (user?.verifyCode) {
+      demo.classList.remove('d-none');
+      demo.textContent = 'Demo code: ' + user.verifyCode;
+    } else {
+      demo.classList.add('d-none');
+      demo.textContent = '';
+    }
+  }
+}
+
+function showApplicationStep(user, preferredCourseId) {
+  document.getElementById('app-view')?.classList.add('d-none');
+  document.getElementById('login-view')?.classList.remove('d-none');
+  hideAllAuthPanels();
+  document.getElementById('apply-panel')?.classList.remove('d-none');
+  document.getElementById('pitch-strip')?.classList.add('d-none');
+  const sel = document.getElementById('apply-programme');
+  if (sel) {
+    sel.innerHTML = getCourses().map((c) =>
+      `<option value="${c.id}" ${preferredCourseId && c.id === preferredCourseId ? 'selected' : ''}>${escapeHtml(c.programme || c.title)}</option>`
+    ).join('');
+  }
+}
+
+function wireDemoFills() {
+  document.querySelectorAll('.demo-fill').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const email = btn.getAttribute('data-email') || '';
+      const pass = btn.getAttribute('data-pass') || '';
+      const e = document.getElementById('email');
+      const p = document.getElementById('password');
+      if (e) e.value = email;
+      if (p) p.value = pass;
+      announce('Filled ' + (btn.textContent || 'demo') + ' credentials');
+      e?.focus();
+    });
+  });
+}
+
+function wireOnboardingForms() {
+  document.getElementById('register-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const err = document.getElementById('reg-error');
+    const result = createLearnerAccount({
+      name: document.getElementById('reg-name')?.value?.trim(),
+      email: document.getElementById('reg-email')?.value?.trim(),
+      phone: document.getElementById('reg-phone')?.value?.trim(),
+      password: document.getElementById('reg-password')?.value,
+      password2: document.getElementById('reg-password2')?.value,
+    });
+    if (!result.ok) {
+      if (err) { err.textContent = result.message; err.classList.remove('d-none'); }
+      return;
+    }
+    if (err) err.classList.add('d-none');
+    showVerifyPanel(result.user);
+  });
+
+  document.getElementById('verify-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const s = getSession();
+    const err = document.getElementById('verify-error');
+    if (!s) {
+      if (err) { err.textContent = 'Session expired. Sign in again.'; err.classList.remove('d-none'); }
+      return;
+    }
+    const code = document.getElementById('verify-code')?.value?.trim();
+    const result = verifyLearnerEmail(s.id, code);
+    if (!result.ok) {
+      if (err) { err.textContent = result.message; err.classList.remove('d-none'); }
+      return;
+    }
+    if (err) err.classList.add('d-none');
+    showApplicationStep(result.user);
+  });
+
+  document.getElementById('btn-resend-code')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    const s = getSession();
+    if (!s) return showLogin();
+    const users = load(KEYS.users, []);
+    const user = users.find((u) => u.id === s.id);
+    if (user) {
+      user.verifyCode = generateVerifyCode();
+      save(KEYS.users, users);
+      setSession(user);
+      showVerifyPanel(user);
+      announce('New demo code generated');
+    }
+  });
+
+  document.getElementById('btn-show-login-from-verify')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    showLogin();
+  });
+
+  document.getElementById('btn-show-login')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    logout();
+  });
+
+  wireDemoFills();
+}
+
+// Patch boot to wire forms after original boot
+(function patchBootOnboarding() {
+  const prev = typeof bootEduFlow === 'function' ? bootEduFlow : null;
+  if (!prev) {
+    document.addEventListener('DOMContentLoaded', () => {
+      wireOnboardingForms();
+    });
+    return;
+  }
+  // boot already ran or will run — wire immediately and also after a tick
+  const run = () => { try { wireOnboardingForms(); } catch (e) { console.error(e); } };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run);
+  else run();
+  setTimeout(run, 100);
+})();
