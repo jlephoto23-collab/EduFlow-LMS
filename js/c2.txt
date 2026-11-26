@@ -1,0 +1,130 @@
+/** Advanced grading rubric + polished progress bars (loads after c1) */
+function renderGrading() {
+  const s = getSession();
+  if (!isStaff(s)) {
+    content().innerHTML = pageNavBar({ backLabel: 'Back to Home' }) + '<h2 class="page-title">Grading</h2><div class="empty">Staff only.</div>';
+    wirePageNav(goHome);
+    focusPageHeading();
+    return;
+  }
+  const RUBRIC = [
+    { id: 'clarity', label: 'Task clarity & structure' },
+    { id: 'content', label: 'Content accuracy' },
+    { id: 'evidence', label: 'Evidence / examples' },
+    { id: 'presentation', label: 'Presentation & language' },
+  ];
+  const passScore = 6;
+  const users = load(KEYS.users, []);
+  const courses = getCourses();
+  const list = getSubmissionsList().slice().sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
+  const pending = list.filter((x) => x.status === 'submitted');
+  const graded = list.filter((x) => x.status === 'graded');
+  let html = pageNavBar({ backLabel: 'Back to Home' }) +
+    '<h2 class="page-title">Grading</h2>' +
+    '<p class="page-subtitle">Rubric (0–2 each) · Competent / Not yet competent · Max 2 attempts</p>' +
+    '<div class="content-block mb-3"><p class="small mb-0">Score each criterion. Total out of 8. <strong>6+</strong> suggests Competent — you can still override.</p></div>';
+  if (!list.length) {
+    html += '<div class="empty">No submissions yet.<br><span class="text-secondary small">Learner assignment uploads appear here with the rubric.</span></div>';
+  } else {
+    if (pending.length) {
+      html += '<h3 class="h6 mb-2">To grade (' + pending.length + ')</h3>';
+      pending.forEach((sub) => {
+        const u = users.find((x) => x.id === sub.learnerId);
+        const c = courses.find((x) => x.id === sub.courseId);
+        html += '<div class="list-card">' +
+          '<h3>' + escapeHtml(u?.name || 'Learner') + '</h3>' +
+          '<p class="text-secondary small mb-1">' + escapeHtml(c?.programme || '') + ' · Attempt ' + (sub.attempt || 1) + ' · ' + escapeHtml(sub.fileName || 'file') + '</p>' +
+          '<p class="small mb-2">' + escapeHtml(sub.notes || '') + '</p>' +
+          (sub.fileDataUrl && !sub.tooLarge ? '<p class="small mb-2"><a href="' + sub.fileDataUrl + '" target="_blank" rel="noopener">Open submitted file</a></p>' : '') +
+          '<div class="rubric-box" id="rubric-' + sub.id + '">' +
+          '<h4>Assessment rubric</h4>' +
+          RUBRIC.map((r) => '<div class="rubric-row"><span>' + escapeHtml(r.label) + '</span>' +
+            '<select data-rubric="' + sub.id + '" data-crit="' + r.id + '" aria-label="' + escapeHtml(r.label) + '">' +
+            '<option value="0">0</option><option value="1">1</option><option value="2" selected>2</option></select></div>').join('') +
+          '<div class="rubric-total"><span>Total</span><span id="rubric-total-' + sub.id + '">8 / 8</span></div>' +
+          '<p class="small text-secondary mb-0 mt-1" id="rubric-hint-' + sub.id + '">Suggested: Competent</p></div>' +
+          '<label class="form-label">Feedback to learner</label>' +
+          '<input type="text" class="form-control mb-2" id="fb-' + sub.id + '" placeholder="Short, actionable feedback">' +
+          '<div class="d-flex gap-2 flex-wrap">' +
+          '<button type="button" class="btn btn-sm btn-primary" data-grade="' + sub.id + '" data-result="Competent">Mark Competent</button>' +
+          '<button type="button" class="btn btn-sm btn-outline-light" data-grade="' + sub.id + '" data-result="Not Yet Competent">Not yet competent</button>' +
+          '</div></div>';
+      });
+    }
+    if (graded.length) {
+      html += '<h3 class="h6 mt-3 mb-2">Recently graded</h3>';
+      graded.slice(0, 8).forEach((sub) => {
+        const u = users.find((x) => x.id === sub.learnerId);
+        const scores = sub.rubricScores || {};
+        const total = Object.values(scores).reduce((a, b) => a + Number(b || 0), 0);
+        html += '<div class="list-card"><h3>' + escapeHtml(u?.name || 'Learner') +
+          ' <span class="badge-soft ' + (sub.grade === 'Competent' ? 'badge-ok' : 'badge-warn') + '">' + escapeHtml(sub.grade || '') + '</span></h3>' +
+          '<p class="small text-secondary mb-0">Attempt ' + (sub.attempt || 1) +
+          (Object.keys(scores).length ? ' · Rubric ' + total + '/8' : '') +
+          ' · ' + escapeHtml(sub.feedback || '') + '</p></div>';
+      });
+    }
+  }
+  content().innerHTML = html;
+  wirePageNav(goHome);
+  function refreshRubric(subId) {
+    let total = 0;
+    content().querySelectorAll('select[data-rubric="' + subId + '"]').forEach((sel) => { total += Number(sel.value || 0); });
+    const el = document.getElementById('rubric-total-' + subId);
+    if (el) el.textContent = total + ' / 8';
+    const hint = document.getElementById('rubric-hint-' + subId);
+    if (hint) hint.textContent = total >= passScore ? 'Suggested: Competent' : 'Suggested: Not yet competent';
+  }
+  content().querySelectorAll('select[data-rubric]').forEach((sel) => {
+    sel.addEventListener('change', () => refreshRubric(sel.getAttribute('data-rubric')));
+  });
+  content().querySelectorAll('[data-grade]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-grade');
+      const result = btn.getAttribute('data-result');
+      const fb = document.getElementById('fb-' + id)?.value || '';
+      const rubricScores = {};
+      let total = 0;
+      content().querySelectorAll('select[data-rubric="' + id + '"]').forEach((sel) => {
+        const crit = sel.getAttribute('data-crit');
+        const v = Number(sel.value || 0);
+        rubricScores[crit] = v;
+        total += v;
+      });
+      const all = getSubmissionsList();
+      const row = all.find((x) => x.id === id);
+      if (!row) return;
+      row.status = 'graded';
+      row.grade = result;
+      row.feedback = fb;
+      row.rubricScores = rubricScores;
+      row.rubricTotal = total;
+      row.gradedAt = new Date().toISOString();
+      row.gradedBy = s.id;
+      saveSubmissionsList(all);
+      announce(result === 'Competent' ? 'Marked Competent' : 'Marked Not yet competent');
+      renderGrading();
+    });
+  });
+  focusPageHeading();
+}
+
+/* Progress bar class on learner home */
+(function patchLearnerHomeProgress() {
+  const orig = renderLearnerHome;
+  if (typeof orig !== 'function') return;
+  renderLearnerHome = function () {
+    orig();
+    content().querySelectorAll('[data-open]').forEach((card) => {
+      const bar = card.querySelector('div[style*="height:8px"]');
+      if (bar && bar.parentElement) {
+        const fill = bar.querySelector('div');
+        const pct = fill && fill.style.width ? fill.style.width : '0%';
+        const wrap = document.createElement('div');
+        wrap.className = 'progress-track';
+        wrap.innerHTML = '<div class="progress-fill" style="width:' + pct + '"></div>';
+        bar.replaceWith(wrap);
+      }
+    });
+  };
+})();
