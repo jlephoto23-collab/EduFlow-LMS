@@ -5,7 +5,7 @@ import {
 Object.assign(globalThis, { KEYS, load, save, uid, seedIfNeeded, onLiveChange, getLiveMode });
 
 const base = new URL('./', import.meta.url);
-const v = '20261126b';
+const v = '20261126c';
 
 try {
   const parts = await Promise.all(
