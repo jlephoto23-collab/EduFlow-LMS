@@ -1,0 +1,208 @@
+/** Strict view isolation + dynamic verify email + demo fills */
+
+function showView(viewId) {
+  document.querySelectorAll('.view').forEach((el) => {
+    el.classList.toggle('is-active', el.id === viewId);
+  });
+  const signedIn = viewId === 'view-workspace';
+  document.getElementById('btn-logout')?.classList.toggle('d-none', !signedIn);
+  document.getElementById('user-chip')?.classList.toggle('d-none', !signedIn);
+  const sub = document.getElementById('brand-sub');
+  if (sub) sub.textContent = signedIn
+    ? 'Workspace'
+    : 'Skills development · Enrol · Learn · Assess';
+  // scroll to top of active view
+  try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (_) { window.scrollTo(0, 0); }
+}
+
+function goToVerifyStep(emailValue, user) {
+  const cleanEmail = (emailValue || user?.email || getSession()?.email || '').trim() || 'your email';
+  const target = document.getElementById('verifyEmailDisplay');
+  if (target) target.textContent = cleanEmail;
+  const legacy = document.getElementById('verify-email-label');
+  if (legacy) legacy.textContent = cleanEmail;
+  const demo = document.getElementById('verify-demo-code');
+  if (demo) {
+    if (user?.verifyCode) {
+      demo.classList.remove('d-none');
+      demo.textContent = 'Demo code: ' + user.verifyCode;
+    } else {
+      demo.classList.add('d-none');
+      demo.textContent = '';
+    }
+  }
+  showView('view-step-2');
+}
+
+function showLogin() {
+  try { setSession(null); } catch (_) {}
+  showView('view-signin');
+}
+
+function showRegisterPanel() {
+  showView('view-step-1');
+}
+
+function showVerifyPanel(user) {
+  goToVerifyStep(user?.email, user);
+}
+
+function showApplicationStep(user, preferredCourseId) {
+  const sel = document.getElementById('apply-programme');
+  if (sel) {
+    sel.innerHTML = getCourses().map((c) =>
+      '<option value="' + c.id + '"' + (preferredCourseId && c.id === preferredCourseId ? ' selected' : '') + '>' +
+      escapeHtml(c.programme || c.title) + '</option>'
+    ).join('');
+  }
+  showView('view-step-3');
+}
+
+function showApp() {
+  try { if (typeof ensureDemoEnrolments === 'function') ensureDemoEnrolments(); } catch (_) {}
+  let s = getSession();
+  if (!s) return showLogin();
+  const fresh = load(KEYS.users, []).find((u) => u.id === s.id || String(u.email).toLowerCase() === String(s.email || '').toLowerCase());
+  if (fresh) { setSession(fresh); s = fresh; }
+  showView('view-workspace');
+  const chip = document.getElementById('user-chip');
+  if (chip) chip.textContent = (s.name || s.email) + ' · ' + (s.role || '');
+  if (typeof renderBottomNav === 'function') renderBottomNav(s);
+  if (typeof isStaff === 'function' && isStaff(s)) {
+    if (typeof renderAdminHome === 'function') renderAdminHome();
+  } else if (typeof renderLearnerHome === 'function') {
+    renderLearnerHome();
+  }
+  if (typeof setNavActive === 'function') setNavActive('home');
+  if (typeof focusPageHeading === 'function') focusPageHeading();
+}
+
+function wireDemoFills() {
+  document.querySelectorAll('.demo-fill').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const email = btn.getAttribute('data-email') || '';
+      const pass = btn.getAttribute('data-pass') || '';
+      const role = btn.getAttribute('data-role') || btn.textContent || 'Demo';
+      const e = document.getElementById('email');
+      const p = document.getElementById('password');
+      if (e) e.value = email;
+      if (p) p.value = pass;
+      document.querySelectorAll('.demo-fill').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      const status = document.getElementById('demo-fill-status');
+      if (status) status.textContent = 'Filled ' + role + ' — ' + email + ' (press Sign in)';
+      if (typeof announce === 'function') announce('Filled ' + role + ' credentials');
+      e?.focus();
+    });
+  });
+}
+
+function wireOnboardingForms() {
+  document.getElementById('btn-register')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    showRegisterPanel();
+  });
+  document.getElementById('btn-show-login-from-reg')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    showLogin();
+  });
+  document.getElementById('btn-show-login-from-verify')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    showLogin();
+  });
+  document.getElementById('btn-show-login')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (typeof logout === 'function') logout();
+    else showLogin();
+  });
+
+  document.getElementById('register-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const err = document.getElementByIdreg-error');
+    const password = document.getElementById('reg-password')?.value || '';
+    const password2 = document.getElementById('reg-password2')?.value || '';
+    if (password !== password2) {
+      if (err) { err.textContent = 'Passwords do not match.'; err.classList.remove('d-none'); }
+      return;
+    }
+    if (password.length < 6) {
+      if (err) { err.textContent = 'Password must be at least 6 characters.'; err.classList.remove('d-none'); }
+      return;
+    }
+    const result = createLearnerAccount({
+      name: document.getElementById('reg-name')?.value?.trim(),
+      email: document.getElementById('reg-email')?.value?.trim(),
+      phone: document.getElementById('reg-phone')?.value?.trim(),
+      password,
+      password2,
+    });
+    if (!result.ok) {
+      if (err) { err.textContent = result.message; err.classList.remove('d-none'); }
+      return;
+    }
+    if (err) err.classList.add('d-none');
+    goToVerifyStep(result.user?.email, result.user);
+  });
+
+  document.getElementById('verify-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const s = getSession();
+    const err = document.getElementById('verify-error');
+    if (!s) {
+      if (err) { err.textContent = 'Session expired. Sign in again.'; err.classList.remove('d-none'); }
+      return;
+    }
+    const code = document.getElementById('verify-code')?.value?.trim();
+    const result = verifyLearnerEmail(s.id, code);
+    if (!result.ok) {
+      if (err) { err.textContent = result.message; err.classList.remove('d-none'); }
+      return;
+    }
+    if (err) err.classList.add('d-none');
+    showApplicationStep(result.user);
+  });
+
+  document.getElementById('btn-resend-code')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    const s = getSession();
+    if (!s) return showLogin();
+    const users = load(KEYS.users, []);
+    const user = users.find((u) => u.id === s.id);
+    if (user) {
+      user.verifyCode = generateVerifyCode();
+      save(KEYS.users, users);
+      setSession(user);
+      goToVerifyStep(user.email, user);
+      if (typeof announce === 'function') announce('New demo code generated');
+    }
+  });
+
+  // File size validation on apply
+  document.getElementById('apply-form')?.addEventListener('submit', (e) => {
+    const err = document.getElementById('apply-error');
+    const max = 1.5 * 1024 * 1024;
+    const files = ['apply-id', 'apply-matric', 'apply-note'].map((id) => document.getElementById(id)?.files?.[0]).filter(Boolean);
+    for (const f of files) {
+      if (f.size > max) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (err) {
+          err.textContent = '"' + f.name + '" is larger than 1.5 MB. Please upload a smaller file.';
+          err.classList.remove('d-none');
+        }
+        return;
+      }
+    }
+  }, true);
+
+  wireDemoFills();
+}
+
+// Wire after modules load
+(function bootViews() {
+  const run = () => { try { wireOnboardingForms(); } catch (err) { console.error(err); } };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run);
+  else run();
+  setTimeout(run, 50);
+  setTimeout(run, 200);
+})();

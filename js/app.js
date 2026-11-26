@@ -5,11 +5,11 @@ import {
 Object.assign(globalThis, { KEYS, load, save, uid, seedIfNeeded, onLiveChange, getLiveMode });
 
 const base = new URL('./', import.meta.url);
-const v = '20261126e';
+const v = '20261126f';
 
 try {
   const parts = await Promise.all(
-    ['c0.txt', 'c1.txt', 'c2.txt', 'c3.txt', 'c4.txt'].map((n) =>
+    ['c0.txt', 'c1.txt', 'c2.txt', 'c3.txt', 'c4.txt', 'c5.txt'].map((n) =>
       fetch(new URL(n + '?v=' + v, base)).then((r) => {
         if (!r.ok) throw new Error('Failed to load ' + n + ' (' + r.status + ')');
         return r.text();
