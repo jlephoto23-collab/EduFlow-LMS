@@ -11,7 +11,6 @@ function showView(viewId) {
   if (sub) sub.textContent = signedIn
     ? 'Workspace'
     : 'Skills development · Enrol · Learn · Assess';
-  // scroll to top of active view
   try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (_) { window.scrollTo(0, 0); }
 }
 
@@ -118,7 +117,7 @@ function wireOnboardingForms() {
 
   document.getElementById('register-form')?.addEventListener('submit', (e) => {
     e.preventDefault();
-    const err = document.getElementByIdreg-error');
+    const err = document.getElementById('reg-error');
     const password = document.getElementById('reg-password')?.value || '';
     const password2 = document.getElementById('reg-password2')?.value || '';
     if (password !== password2) {
@@ -177,7 +176,6 @@ function wireOnboardingForms() {
     }
   });
 
-  // File size validation on apply
   document.getElementById('apply-form')?.addEventListener('submit', (e) => {
     const err = document.getElementById('apply-error');
     const max = 1.5 * 1024 * 1024;
@@ -198,7 +196,6 @@ function wireOnboardingForms() {
   wireDemoFills();
 }
 
-// Wire after modules load
 (function bootViews() {
   const run = () => { try { wireOnboardingForms(); } catch (err) { console.error(err); } };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run);
