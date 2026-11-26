@@ -1,0 +1,105 @@
+/** Phase 2 — Provider analytics panel */
+function startOfWeekISO() {
+  const d = new Date();
+  const day = d.getDay();
+  const diff = day === 0 ? 6 : day - 1;
+  d.setDate(d.getDate() - diff);
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString().slice(0, 10);
+}
+
+function getProviderAnalytics() {
+  const courses = getCourses();
+  const enrolments = getEnrolments().filter((e) => e.status === 'approved');
+  const progress = typeof getProgressList === 'function' ? getProgressList() : load(KEYS.progress, []);
+  const weekStart = startOfWeekISO();
+  const attendance = getAttendance().filter((a) => String(a.date || '') >= weekStart);
+  const signed = attendance.length;
+  const approvedAtt = attendance.filter((a) => a.status === 'approved').length;
+  const subs = typeof getSubmissionsList === 'function' ? getSubmissionsList() : load(KEYS.submissions, []);
+  const toGrade = subs.filter((s) => s.status === 'submitted');
+  const graded = subs.filter((s) => s.status === 'graded');
+
+  const byProgramme = courses.map((c) => {
+    const enrolled = enrolments.filter((e) => e.courseId === c.id);
+    const learnerIds = enrolled.map((e) => e.learnerId);
+    const lessons = c.lessons || [];
+    const totalSlots = Math.max(learnerIds.length * lessons.length, 0);
+    let doneSlots = 0;
+    learnerIds.forEach((lid) => {
+      lessons.forEach((l) => {
+        if (progress.some((p) => p.learnerId === lid && p.courseId === c.id && p.lessonId === l.id && p.done)) doneSlots += 1;
+      });
+    });
+    const pct = totalSlots ? Math.round((doneSlots / totalSlots) * 100) : 0;
+    return {
+      courseId: c.id,
+      programme: c.programme || c.title,
+      learners: enrolled.length,
+      pct,
+      hasLearners: enrolled.length > 0,
+      doneSlots,
+      totalSlots,
+    };
+  });
+
+  return {
+    weekStart,
+    attendance: { signed, approved: approvedAtt },
+    submissions: { toGrade: toGrade.length, graded: graded.length },
+    byProgramme,
+    pendingApps: getEnrolments().filter((e) => e.status === 'pending').length,
+  };
+}
+
+function renderProviderAnalytics() {
+  const s = getSession();
+  if (!isStaff(s)) return goHome();
+  const a = getProviderAnalytics();
+  let html = pageNavBar({ backLabel: 'Back to Dashboard' }) +
+    '<h2 class="page-title">Provider analytics</h2>' +
+    '<p class="page-subtitle">Completion · Attendance this week · Work to grade</p>' +
+    '<div class="list-card"><h3>This week</h3>' +
+    '<p class="small text-secondary mb-2">Week starting ' + escapeHtml(a.weekStart) + '</p>' +
+    '<p class="mb-1"><strong>' + a.attendance.signed + '</strong> register sign-ins · <strong>' + a.attendance.approved + '</strong> approved</p>' +
+    '<p class="mb-0"><strong>' + a.submissions.toGrade + '</strong> submissions to grade · <strong>' + a.submissions.graded + '</strong> graded</p></div>' +
+    '<div class="list-card"><h3>Applications</h3>' +
+    '<p class="mb-0"><strong>' + a.pendingApps + '</strong> pending admin review</p></div>' +
+    '<h3 class="h6 mt-3 mb-2">% complete by programme</h3>';
+  a.byProgramme.forEach((row) => {
+    const label = row.hasLearners
+      ? (row.pct + '% · ' + row.learners + ' learner' + (row.learners === 1 ? '' : 's') + ' · ' + row.doneSlots + '/' + row.totalSlots + ' lesson steps')
+      : 'No approved learners yet';
+    html += '<div class="list-card"><h3>' + escapeHtml(row.programme) + '</h3>' +
+      '<div class="progress-track"><div class="progress-fill" style="width:' + (row.hasLearners ? row.pct : 0) + '%"></div></div>' +
+      '<p class="small text-secondary mb-0">' + escapeHtml(label) + '</p></div>';
+  });
+  html += '<div class="content-block"><p class="small mb-0">Figures update as learners complete lessons, sign the register, and facilitators grade work.</p></div>';
+  content().innerHTML = html;
+  wirePageNav(goHome);
+  focusPageHeading();
+}
+
+function renderAdminHome() {
+  try { if (typeof ensureDemoEnrolments === 'function') ensureDemoEnrolments(); } catch (_) {}
+  const a = getProviderAnalytics();
+  content().innerHTML = '<div class="welcome-banner"><h2>Provider dashboard</h2>' +
+    '<p>Approve applications · Track completion · Confirm attendance · Grade submissions</p></div>' +
+    '<div class="list-card list-link" id="dash-analytics" role="button" tabindex="0">' +
+    '<h3>Analytics snapshot</h3>' +
+    '<p class="mb-1">Completion by programme · Attendance this week</p>' +
+    '<p class="small text-secondary mb-0">' + a.submissions.toGrade + ' to grade · ' + a.attendance.signed + ' signed this week · ' + a.pendingApps + ' pending apps</p></div>' +
+    '<div class="list-card list-link" id="dash-pending" role="button" tabindex="0"><h3>Pending applications</h3><p class="mb-0">' + a.pendingApps + ' awaiting review</p></div>' +
+    '<div class="list-card list-link" id="dash-grade" role="button" tabindex="0"><h3>To grade</h3><p class="mb-0">' + a.submissions.toGrade + ' submissions</p></div>' +
+    '<div class="list-card list-link" id="dash-att" role="button" tabindex="0"><h3>Attendance this week</h3><p class="mb-0">' + a.attendance.signed + ' signed · ' + a.attendance.approved + ' approved</p></div>' +
+    '<div class="list-card list-link" id="dash-courses" role="button" tabindex="0"><h3>Programmes</h3><p class="mb-0">' + getCourses().length + ' active</p></div>';
+  document.getElementById('dash-analytics')?.addEventListener('click', () => renderProviderAnalytics());
+  document.getElementById('dash-analytics')?.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); renderProviderAnalytics(); }
+  });
+  document.getElementById('dash-pending')?.addEventListener('click', renderApprovals);
+  document.getElementById('dash-grade')?.addEventListener('click', () => { renderGrading(); setNavActive('grade'); });
+  document.getElementById('dash-att')?.addEventListener('click', () => { renderLiveSessions(); setNavActive('live'); });
+  document.getElementById('dash-courses')?.addEventListener('click', () => { renderCatalog(); setNavActive('courses'); });
+  focusPageHeading();
+}
