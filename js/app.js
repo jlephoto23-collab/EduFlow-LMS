@@ -5,7 +5,7 @@ import {
 Object.assign(globalThis, { KEYS, load, save, uid, seedIfNeeded, onLiveChange, getLiveMode });
 
 const base = new URL('./', import.meta.url);
-const v = '20261126g';
+const v = '20261126h';
 
 try {
   const parts = await Promise.all(
@@ -17,6 +17,8 @@ try {
     )
   );
   new Function(parts.join('\n'))();
+  document.body?.classList.add('ef-ready');
+  document.getElementById('splash')?.classList.add('hide');
 } catch (err) {
   console.error('EduFlow boot error:', err);
   const splash = document.getElementById('splash');

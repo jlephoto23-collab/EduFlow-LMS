@@ -1,0 +1,37 @@
+/* Mobile safety + single chrome */
+html, body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+img, video, canvas, iframe, table {
+  max-width: 100%;
+}
+.topbar, .shell, .card, .auth-card, .list-card, .content-block, .bottom-nav {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.topbar {
+  width: 100%;
+}
+.user-chip {
+  max-width: 28vw;
+}
+@media (max-width: 420px) {
+  .topbar-status span:last-child {
+    /* keep short label */
+  }
+  .demo-fill-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .btn-lg {
+    font-size: 1rem;
+  }
+  .shell {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+}
+/* Never show splash under the app */
+body.ef-ready #splash {
+  display: none !important;
+}
