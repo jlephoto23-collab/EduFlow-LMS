@@ -1,18 +1,82 @@
-/** Attendance helpers — override seed markAttendance with status */
+/** ========== Progress / certificates ========== */
+function getProgressList() { return load(KEYS.progress, []); }
+function saveProgressList(list) { save(KEYS.progress, list); }
+function isLessonDone(learnerId, courseId, lessonId) {
+  return getProgressList().some((p) => p.learnerId === learnerId && p.courseId === courseId && p.lessonId === lessonId && p.done);
+}
+function markLessonDone(learnerId, courseId, lessonId) {
+  const list = getProgressList();
+  const row = list.find((p) => p.learnerId === learnerId && p.courseId === courseId && p.lessonId === lessonId);
+  if (row) { row.done = true; row.at = new Date().toISOString(); }
+  else list.push({ id: uid(), learnerId, courseId, lessonId, done: true, at: new Date().toISOString() });
+  saveProgressList(list);
+}
+function getCourseProgress(learnerId, courseId) {
+  const c = getCourse(courseId);
+  const lessons = c?.lessons || [];
+  if (!lessons.length) return { done: 0, total: 0, pct: 0 };
+  const done = lessons.filter((l) => isLessonDone(learnerId, courseId, l.id)).length;
+  return { done, total: lessons.length, pct: Math.round((done / lessons.length) * 100) };
+}
+function getSubmissionsList() { return load(KEYS.submissions, []); }
+function saveSubmissionsList(list) { save(KEYS.submissions, list); }
+function ensureCertificate(learnerId, courseId) {
+  const prog = getCourseProgress(learnerId, courseId);
+  if (prog.pct < 100) return null;
+  const list = getCertificates();
+  let cert = list.find((x) => x.learnerId === learnerId && x.courseId === courseId);
+  if (!cert) {
+    const c = getCourse(courseId);
+    cert = {
+      id: uid(), learnerId, courseId,
+      programme: c?.programme || c?.title || '',
+      issuedAt: new Date().toISOString(),
+      code: 'EF-' + Math.random().toString(36).slice(2, 8).toUpperCase(),
+      status: 'eligible',
+    };
+    list.unshift(cert);
+    save(KEYS.certificates, list);
+  }
+  return cert;
+}
+
+/** Stronger demo seed repair */
+function ensureDemoEnrolments() {
+  const users = load(KEYS.users, []);
+  let changed = false;
+  const need = [
+    { id: 'u_admin', name: 'Admin Trainer', email: 'admin@eduflow.test', password: 'admin123', role: 'admin', status: 'approved' },
+    { id: 'u_facil', name: 'Facilitator Demo', email: 'facilitator@eduflow.test', password: 'facil123', role: 'facilitator', status: 'approved' },
+    { id: 'u_l1', name: 'Aisha Learner', email: 'learner1@gmail.com', password: 'learner123', role: 'learner', status: 'approved' },
+    { id: 'u_pend', name: 'Thabo Applicant', email: 'thabo.apply@gmail.com', password: 'pending123', role: 'learner', status: 'pending' },
+  ];
+  need.forEach((n) => {
+    if (!users.some((u) => u.email === n.email || u.id === n.id)) {
+      users.push({ ...n, gmail: n.email });
+      changed = true;
+    }
+  });
+  if (changed) save(KEYS.users, users);
+  const aisha = users.find((u) => u.email === 'learner1@gmail.com' || u.id === 'u_l1');
+  if (!aisha) return;
+  const list = getEnrolments();
+  if (!list.some((e) => e.learnerId === aisha.id && e.courseId === 'c_pm4' && e.status === 'approved')) {
+    list.push({ id: 'enr1', learnerId: aisha.id, courseId: 'c_pm4', status: 'approved', paymentStatus: 'paid', enrolledAt: new Date().toISOString() });
+    saveEnrolments(list);
+  }
+  // Ensure courses exist
+  if (!getCourses().length) {
+    try { seedIfNeeded(); } catch (_) {}
+  }
+}
+
+/** ========== Attendance (keep) ========== */
 function markAttendance(learnerId, courseId) {
   const list = getAttendance();
   const day = todayISODate();
   const existing = list.find((a) => a.learnerId === learnerId && a.courseId === courseId && a.date === day);
   if (existing) return existing;
-  const row = {
-    id: uid(),
-    learnerId,
-    courseId,
-    date: day,
-    at: new Date().toISOString(),
-    status: 'signed', // signed | approved
-    signedName: null,
-  };
+  const row = { id: uid(), learnerId, courseId, date: day, at: new Date().toISOString(), status: 'signed', signedName: null };
   list.unshift(row);
   save(KEYS.attendance, list);
   return row;
@@ -27,15 +91,7 @@ function signRegister(learnerId, courseId, signedName) {
     row.at = new Date().toISOString();
     row.status = 'signed';
   } else {
-    row = {
-      id: uid(),
-      learnerId,
-      courseId,
-      date: day,
-      at: new Date().toISOString(),
-      status: 'signed',
-      signedName: signedName || '',
-    };
+    row = { id: uid(), learnerId, courseId, date: day, at: new Date().toISOString(), status: 'signed', signedName: signedName || '' };
     list.unshift(row);
   }
   save(KEYS.attendance, list);
@@ -52,28 +108,23 @@ function approveAttendance(attendanceId) {
   save(KEYS.attendance, list);
   return { ok: true, row };
 }
-function saveAttendanceList(list) { save(KEYS.attendance, list); }
 
-/** Live tab = attendance register */
 function renderLiveSessions() {
   const s = getSession();
   if (!s) return showLogin();
   const day = todayISODate();
   const courses = getCourses();
   const users = load(KEYS.users, []);
-
   if (isStaff(s)) {
-    // Facilitator / admin: review & approve today's sign-ins
     const todayRows = getAttendance().filter((a) => a.date === day);
     const pending = todayRows.filter((a) => a.status !== 'approved');
     const approved = todayRows.filter((a) => a.status === 'approved');
-
     let html = pageNavBar({ backLabel: 'Back to Home' }) +
       `<h2 class="page-title">Attendance register</h2>
-      <p class="page-subtitle">Today · ${escapeHtml(day)} · Approve learner sign-ins</p>`;
-
+      <p class="page-subtitle">Today · ${escapeHtml(day)} · Learners sign; you approve</p>
+      <div class="content-block mb-3"><p class="small mb-0"><strong>How it works:</strong> Approved learners open Live, type their full name, and sign. Facilitators approve each sign-in for the day.</p></div>`;
     if (!todayRows.length) {
-      html += `<div class="empty">No learners have signed the register yet today.</div>`;
+      html += `<div class="empty">No learners have signed yet today.<br><span class="text-secondary small">Ask learners to open Live → Sign register during class.</span></div>`;
     } else {
       if (pending.length) {
         html += `<h3 class="h6 mt-2 mb-2">Awaiting approval (${pending.length})</h3>`;
@@ -81,12 +132,10 @@ function renderLiveSessions() {
           const u = users.find((x) => x.id === a.learnerId);
           const c = courses.find((x) => x.id === a.courseId);
           const time = a.at ? new Date(a.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-          html += `<div class="list-card">
-            <h3>${escapeHtml(u?.name || 'Learner')}</h3>
-            <p class="text-secondary small mb-1">${escapeHtml(c?.programme || c?.title || a.courseId)} · signed ${escapeHtml(time)}</p>
+          html += `<div class="list-card"><h3>${escapeHtml(u?.name || 'Learner')}</h3>
+            <p class="text-secondary small mb-1">${escapeHtml(c?.programme || a.courseId)} · ${escapeHtml(time)}</p>
             <p class="small mb-2">Signature: <strong>${escapeHtml(a.signedName || u?.name || '—')}</strong></p>
-            <button type="button" class="btn btn-sm btn-primary" data-approve-att="${a.id}">Approve attendance</button>
-          </div>`;
+            <button type="button" class="btn btn-sm btn-primary" data-approve-att="${a.id}">Approve attendance</button></div>`;
         });
       }
       if (approved.length) {
@@ -94,54 +143,46 @@ function renderLiveSessions() {
         approved.forEach((a) => {
           const u = users.find((x) => x.id === a.learnerId);
           const c = courses.find((x) => x.id === a.courseId);
-          html += `<div class="list-card">
-            <h3>${escapeHtml(u?.name || 'Learner')} <span class="badge-soft badge-ok">Approved</span></h3>
-            <p class="text-secondary small mb-0">${escapeHtml(c?.programme || '')} · ${escapeHtml(a.signedName || '')}</p>
-          </div>`;
+          html += `<div class="list-card"><h3>${escapeHtml(u?.name || 'Learner')} <span class="badge-soft badge-ok">Approved</span></h3>
+            <p class="text-secondary small mb-0">${escapeHtml(c?.programme || '')} · ${escapeHtml(a.signedName || '')}</p></div>`;
         });
       }
     }
-
     content().innerHTML = html;
     wirePageNav(goHome);
     content().querySelectorAll('[data-approve-att]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const r = approveAttendance(btn.getAttribute('data-approve-att'));
-        if (r.ok) announce('Attendance approved');
-        else announce(r.message || 'Could not approve');
+        announce(r.ok ? 'Attendance approved' : (r.message || 'Could not approve'));
         renderLiveSessions();
       });
     });
     focusPageHeading();
     return;
   }
-
-  // Learner: sign register for approved programmes
   const approved = getApprovedEnrolments(s.id);
   let html = pageNavBar({ backLabel: 'Back to Home' }) +
     `<h2 class="page-title">Attendance register</h2>
-    <p class="page-subtitle">Sign for today · ${escapeHtml(day)}</p>`;
-
+    <p class="page-subtitle">Sign for today · ${escapeHtml(day)}</p>
+    <div class="content-block mb-3"><p class="small mb-0">Sign once per programme each day. Your facilitator approves the register.</p></div>`;
   if (!approved.length) {
-    html += `<div class="empty">You need an approved programme before you can sign the register.</div>`;
+    html += `<div class="empty">You need an <strong>approved</strong> programme before you can sign.<br><span class="text-secondary small">Apply under Courses, then wait for admin approval.</span></div>`;
     content().innerHTML = html;
     wirePageNav(goHome);
     focusPageHeading();
     return;
   }
-
   const att = getAttendance();
   approved.forEach((e) => {
     const c = courses.find((x) => x.id === e.courseId);
     const today = att.find((a) => a.learnerId === s.id && a.courseId === e.courseId && a.date === day);
     const status = today?.status;
-    html += `<div class="list-card">
-      <h3>${escapeHtml(c?.programme || c?.title || 'Programme')}</h3>`;
+    html += `<div class="list-card"><h3>${escapeHtml(c?.programme || c?.title || 'Programme')}</h3>`;
     if (status === 'approved') {
       html += `<p class="mb-0"><span class="badge-soft badge-ok">Approved</span> · Signed as ${escapeHtml(today.signedName || s.name || '')}</p>`;
     } else if (status === 'signed') {
       html += `<p class="mb-2"><span class="badge-soft badge-warn">Signed — awaiting facilitator</span></p>
-        <p class="small text-secondary mb-0">You signed as ${escapeHtml(today.signedName || s.name || '')}. A facilitator will approve.</p>`;
+        <p class="small text-secondary mb-0">You signed as ${escapeHtml(today.signedName || s.name || '')}.</p>`;
     } else {
       html += `<label class="form-label">Full name (signature)</label>
         <input type="text" class="form-control mb-2" id="sign-name-${e.courseId}" value="${escapeHtml(s.name || '')}" required>
@@ -149,34 +190,350 @@ function renderLiveSessions() {
     }
     html += `</div>`;
   });
-
   content().innerHTML = html;
   wirePageNav(goHome);
   content().querySelectorAll('[data-sign]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const courseId = btn.getAttribute('data-sign');
-      const input = document.getElementById('sign-name-' + courseId);
-      const name = (input?.value || '').trim();
-      if (!name) {
-        announce('Enter your full name to sign');
-        return;
-      }
+      const name = (document.getElementById('sign-name-' + courseId)?.value || '').trim();
+      if (!name) { announce('Enter your full name to sign'); return; }
       const r = signRegister(s.id, courseId, name);
-      if (r.ok) announce('Register signed for today');
-      else announce(r.message || 'Could not sign');
+      announce(r.ok ? 'Register signed for today' : (r.message || 'Could not sign'));
       renderLiveSessions();
     });
   });
   focusPageHeading();
 }
 
+/** ========== Learner home with progress + certificate ========== */
+function renderLearnerHome() {
+  const s = getSession();
+  try { ensureDemoEnrolments(); } catch (_) {}
+  const approved = getApprovedEnrolments(s.id);
+  const courses = getCourses();
+  let html = `<div class="welcome-banner"><h2>Welcome, ${escapeHtml(s.name || 'Learner')}</h2>
+    <p>One active programme · Pay to unlock · Complete lessons · Sign attendance</p></div>`;
+  if (!approved.length) {
+    html += `<div class="empty">No approved programme yet.<br><span class="text-secondary small">Apply under Courses with ID and Matric. Admin will approve you.</span></div>
+      <button class="btn btn-primary w-100" id="btn-home-courses">Go to Courses</button>`;
+  } else {
+    approved.forEach((e) => {
+      const c = courses.find((x) => x.id === e.courseId);
+      const pay = getEnrolmentPaymentStatus(e);
+      const prog = getCourseProgress(s.id, e.courseId);
+      const cert = prog.pct >= 100 ? ensureCertificate(s.id, e.courseId) : null;
+      html += `<div class="list-card list-link" data-open="${e.courseId}" role="button" tabindex="0">
+        <h3>${escapeHtml(c?.programme || c?.title || '')}</h3>
+        <p class="text-secondary small mb-2">NQF ${c?.nqfLevel} · ${formatMoney(c?.feeZAR)} · SAQA ${escapeHtml(c?.saqaId || '')}</p>
+        <div class="mb-2" style="background:rgba(255,255,255,.08);border-radius:8px;height:8px;overflow:hidden">
+          <div style="height:100%;width:${prog.pct}%;background:#22c55e;border-radius:8px"></div>
+        </div>
+        <p class="small mb-2">Progress: <strong>${prog.done}/${prog.total}</strong> lessons · ${prog.pct}%</p>
+        <span class="badge-soft ${pay==='paid'?'badge-ok':'badge-warn'}">${pay==='paid'?'Paid — open modules':'Payment outstanding'}</span>
+        ${cert ? `<span class="badge-soft badge-ok ms-1">Certificate eligible</span>` : ''}
+      </div>`;
+    });
+  }
+  content().innerHTML = html;
+  content().querySelectorAll('[data-open]').forEach((el) => {
+    el.addEventListener('click', () => renderCourseDetail(el.getAttribute('data-open')));
+    el.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); renderCourseDetail(el.getAttribute('data-open')); } });
+  });
+  document.getElementById('btn-home-courses')?.addEventListener('click', () => { renderCatalog(); setNavActive('courses'); });
+  focusPageHeading();
+}
+
+/** ========== Lessons: guide/content + quiz + assignment ========== */
+function openLesson(courseId, lessonId, idx) {
+  const s = getSession();
+  const c = getCourse(courseId);
+  const lessons = c?.lessons || [];
+  const lesson = lessons.find((l) => l.id === lessonId) || lessons[idx];
+  if (!lesson) return renderCourseDetail(courseId);
+  const i = typeof idx === 'number' ? idx : lessons.findIndex((l) => l.id === lessonId);
+  const hasPrev = i > 0;
+  const hasNext = i < lessons.length - 1;
+  const done = isLessonDone(s.id, courseId, lesson.id);
+
+  if (lesson.type === 'quiz' && lesson.quiz) {
+    const qz = lesson.quiz;
+    let html = pageNavBar({ backLabel: 'Back to course', nextLabel: hasNext ? 'Next' : null }) +
+      `<h2 class="page-title">${escapeHtml(lesson.title)}</h2>
+      <p class="text-secondary small mb-2">Formative assessment · Pass mark ${qz.passMark || 70}% · ${done ? '<span class="badge-soft badge-ok">Completed</span>' : 'Not completed'}</p>
+      <form id="quiz-form" class="content-block">`;
+    (qz.questions || []).forEach((q, qi) => {
+      html += `<div class="mb-3"><p class="mb-2"><strong>Q${qi + 1}.</strong> ${escapeHtml(q.q)}</p>`;
+      (q.options || []).forEach((opt, oi) => {
+        html += `<label class="d-block mb-1"><input type="radio" name="q${qi}" value="${oi}" class="me-2"> ${escapeHtml(opt)}</label>`;
+      });
+      html += `</div>`;
+    });
+    html += `<div id="quiz-result" class="mb-2"></div>
+      <button type="submit" class="btn btn-primary w-100">Submit answers</button></form>`;
+    content().innerHTML = html;
+    wirePageNav(() => renderCourseDetail(courseId), hasNext ? () => openLesson(courseId, lessons[i + 1].id, i + 1) : null);
+    document.getElementById('quiz-form')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      let correct = 0;
+      const qs = qz.questions || [];
+      qs.forEach((q, qi) => {
+        const sel = document.querySelector(`input[name="q${qi}"]:checked`);
+        if (sel && Number(sel.value) === Number(q.correctIndex)) correct += 1;
+      });
+      const pct = qs.length ? Math.round((correct / qs.length) * 100) : 0;
+      const pass = pct >= (qz.passMark || 70);
+      const result = document.getElementById('quiz-result');
+      if (result) {
+        result.innerHTML = pass
+          ? `<div class="alert alert-success py-2">Score ${pct}% — Competent. Well done.</div>`
+          : `<div class="alert alert-warning py-2">Score ${pct}% — Not yet competent. Review the module and try again.</div>`;
+      }
+      if (pass) {
+        markLessonDone(s.id, courseId, lesson.id);
+        ensureCertificate(s.id, courseId);
+        announce('Assessment passed');
+      } else announce('Not yet competent — retry after review');
+    });
+    focusPageHeading();
+    return;
+  }
+
+  if (lesson.type === 'assignment') {
+    const subs = getSubmissionsList().filter((x) => x.learnerId === s.id && x.courseId === courseId && x.lessonId === lesson.id);
+    const latest = subs[0];
+    let html = pageNavBar({ backLabel: 'Back to course', nextLabel: hasNext ? 'Next' : null }) +
+      `<h2 class="page-title">${escapeHtml(lesson.title)}</h2>
+      <p class="text-secondary small mb-2">Summative assignment · Attempt ${(latest?.attempt || 0) + (latest?.status === 'submitted' || latest?.status === 'graded' ? 0 : 1)} of 2</p>
+      <div class="content-block mb-3">${formatBody(lesson.body || 'Complete the task and upload your file.')}</div>`;
+    if (latest) {
+      html += `<div class="list-card mb-3"><p class="mb-1"><strong>Last submission</strong> · ${escapeHtml(latest.status)}</p>
+        <p class="small text-secondary mb-1">${latest.fileName ? escapeHtml(latest.fileName) : 'No file'} · ${latest.at ? new Date(latest.at).toLocaleString() : ''}</p>
+        ${latest.grade ? `<p class="mb-0"><span class="badge-soft ${latest.grade === 'Competent' ? 'badge-ok' : 'badge-warn'}">${escapeHtml(latest.grade)}</span> ${escapeHtml(latest.feedback || '')}</p>` : '<p class="small mb-0 text-secondary">Awaiting facilitator grade</p>'}
+      </div>`;
+    }
+    if (!latest || latest.grade === 'Not Yet Competent' || (latest.status === 'graded' && latest.attempt < 2 && latest.grade !== 'Competent')) {
+      html += `<div class="content-block"><label class="form-label">Upload submission (PDF/image)</label>
+        <input type="file" id="asg-file" class="form-control mb-2" accept=".pdf,.jpg,.jpeg,.png,image/*,application/pdf">
+        <label class="form-label">Notes</label>
+        <textarea id="asg-notes" class="form-control mb-2" rows="2" placeholder="Brief note for the facilitator"></textarea>
+        <button type="button" class="btn btn-primary w-100" id="btn-submit-asg">Submit assignment</button></div>`;
+    } else if (latest && latest.grade === 'Competent') {
+      html += `<div class="content-block"><span class="badge-soft badge-ok">Competent</span> — This task is complete.</div>`;
+    }
+    content().innerHTML = html;
+    wirePageNav(() => renderCourseDetail(courseId), hasNext ? () => openLesson(courseId, lessons[i + 1].id, i + 1) : null);
+    document.getElementById('btn-submit-asg')?.addEventListener('click', async () => {
+      const file = await readFilesFromInput(document.getElementById('asg-file'), false);
+      const notes = document.getElementById('asg-notes')?.value || '';
+      if (!file) { announce('Choose a file to upload'); return; }
+      const attempt = (latest?.attempt || 0) + 1;
+      if (attempt > 2) { announce('Maximum 2 attempts'); return; }
+      const list = getSubmissionsList();
+      list.unshift({
+        id: uid(), learnerId: s.id, courseId, lessonId: lesson.id,
+        assignmentId: lesson.assignmentId || lesson.id,
+        status: 'submitted', attempt, notes,
+        fileName: file.name, fileDataUrl: file.dataUrl, tooLarge: file.tooLarge,
+        at: new Date().toISOString(), grade: null, feedback: '',
+      });
+      saveSubmissionsList(list);
+      markLessonDone(s.id, courseId, lesson.id);
+      announce('Assignment submitted');
+      openLesson(courseId, lesson.id, i);
+    });
+    focusPageHeading();
+    return;
+  }
+
+  // guide / content
+  content().innerHTML = pageNavBar({ backLabel: 'Back to course', nextLabel: hasNext ? 'Next lesson' : null }) +
+    `<h2 class="page-title">${escapeHtml(lesson.title)}</h2>
+    <p class="text-secondary small mb-2">Lesson ${i + 1} of ${lessons.length} ${done ? '· <span class="badge-soft badge-ok">Done</span>' : ''}</p>
+    <div class="content-block">${formatBody(lesson.body || 'Content for this lesson.')}</div>
+    <div class="d-flex gap-2 mt-3">
+      ${hasPrev ? '<button type="button" class="btn btn-outline-light" id="btn-prev-lesson"><i class="bi bi-arrow-left"></i> Previous</button>' : ''}
+      <button type="button" class="btn btn-primary ${hasPrev ? 'ms-auto' : 'w-100'}" id="btn-mark-done">${done ? 'Completed · Continue' : 'Mark as Done'}</button>
+    </div>`;
+  wirePageNav(() => renderCourseDetail(courseId), hasNext ? () => openLesson(courseId, lessons[i + 1].id, i + 1) : null);
+  document.getElementById('btn-prev-lesson')?.addEventListener('click', () => openLesson(courseId, lessons[i - 1].id, i - 1));
+  document.getElementById('btn-mark-done')?.addEventListener('click', () => {
+    markLessonDone(s.id, courseId, lesson.id);
+    ensureCertificate(s.id, courseId);
+    announce('Marked as done');
+    if (hasNext) openLesson(courseId, lessons[i + 1].id, i + 1);
+    else renderCourseDetail(courseId);
+  });
+  focusPageHeading();
+}
+
+/** ========== Grading trail (staff) ========== */
+function renderGrading() {
+  const s = getSession();
+  if (!isStaff(s)) {
+    content().innerHTML = pageNavBar({ backLabel: 'Back to Home' }) + `<h2 class="page-title">Grading</h2><div class="empty">Staff only.</div>`;
+    wirePageNav(goHome);
+    focusPageHeading();
+    return;
+  }
+  const users = load(KEYS.users, []);
+  const courses = getCourses();
+  const list = getSubmissionsList().slice().sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
+  const pending = list.filter((x) => x.status === 'submitted');
+  const graded = list.filter((x) => x.status === 'graded');
+  let html = pageNavBar({ backLabel: 'Back to Home' }) +
+    `<h2 class="page-title">Grading</h2>
+    <p class="page-subtitle">Competent / Not yet competent · Max 2 attempts</p>
+    <div class="content-block mb-3"><p class="small mb-0">Learners submit summative assignments from their modules. Grade each attempt and leave short feedback.</p></div>`;
+  if (!list.length) {
+    html += `<div class="empty">No submissions yet.<br><span class="text-secondary small">When a learner uploads an assignment, it appears here for grading.</span></div>`;
+  } else {
+    if (pending.length) {
+      html += `<h3 class="h6 mb-2">To grade (${pending.length})</h3>`;
+      pending.forEach((sub) => {
+        const u = users.find((x) => x.id === sub.learnerId);
+        const c = courses.find((x) => x.id === sub.courseId);
+        html += `<div class="list-card">
+          <h3>${escapeHtml(u?.name || 'Learner')}</h3>
+          <p class="text-secondary small mb-1">${escapeHtml(c?.programme || '')} · Attempt ${sub.attempt || 1} · ${escapeHtml(sub.fileName || 'file')}</p>
+          <p class="small mb-2">${escapeHtml(sub.notes || '')}</p>
+          ${sub.fileDataUrl && !sub.tooLarge ? `<p class="small mb-2"><a href="${sub.fileDataUrl}" target="_blank" rel="noopener">Open file</a></p>` : ''}
+          <label class="form-label">Feedback</label>
+          <input type="text" class="form-control mb-2" id="fb-${sub.id}" placeholder="Short feedback">
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-primary" data-grade="${sub.id}" data-result="Competent">Competent</button>
+            <button type="button" class="btn btn-sm btn-outline-light" data-grade="${sub.id}" data-result="Not Yet Competent">Not yet competent</button>
+          </div></div>`;
+      });
+    }
+    if (graded.length) {
+      html += `<h3 class="h6 mt-3 mb-2">Recently graded</h3>`;
+      graded.slice(0, 8).forEach((sub) => {
+        const u = users.find((x) => x.id === sub.learnerId);
+        html += `<div class="list-card"><h3>${escapeHtml(u?.name || 'Learner')} <span class="badge-soft ${sub.grade === 'Competent' ? 'badge-ok' : 'badge-warn'}">${escapeHtml(sub.grade || '')}</span></h3>
+          <p class="small text-secondary mb-0">Attempt ${sub.attempt || 1} · ${escapeHtml(sub.feedback || '')}</p></div>`;
+      });
+    }
+  }
+  content().innerHTML = html;
+  wirePageNav(goHome);
+  content().querySelectorAll('[data-grade]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-grade');
+      const result = btn.getAttribute('data-result');
+      const fb = document.getElementById('fb-' + id)?.value || '';
+      const all = getSubmissionsList();
+      const row = all.find((x) => x.id === id);
+      if (!row) return;
+      row.status = 'graded';
+      row.grade = result;
+      row.feedback = fb;
+      row.gradedAt = new Date().toISOString();
+      row.gradedBy = s.id;
+      saveSubmissionsList(all);
+      announce(result === 'Competent' ? 'Marked Competent' : 'Marked Not yet competent');
+      renderGrading();
+    });
+  });
+  focusPageHeading();
+}
+
+/** ========== Payments empty state ========== */
+function renderPayments() {
+  const s = getSession();
+  const approved = getApprovedEnrolments(s.id);
+  const courses = getCourses();
+  const pays = getPayments().filter((p) => p.learnerId === s.id);
+  let html = pageNavBar({ backLabel: 'Back to Home' }) +
+    `<h2 class="page-title">Fees & payments</h2>
+    <p class="page-subtitle">Pay once per active programme to unlock modules</p>`;
+  if (!approved.length) {
+    html += `<div class="empty">No approved programme to pay for.<br><span class="text-secondary small">After admin approval, your fee appears here.</span></div>`;
+  } else {
+    approved.forEach((e) => {
+      const c = courses.find((x) => x.id === e.courseId);
+      const pay = getEnrolmentPaymentStatus(e);
+      html += `<div class="list-card"><h3>${escapeHtml(c?.programme || '')}</h3>
+        <p class="mb-2">${formatMoney(c?.feeZAR)} · <span class="badge-soft ${pay === 'paid' ? 'badge-ok' : 'badge-warn'}">${pay === 'paid' ? 'Paid' : 'Payment outstanding'}</span></p>
+        ${pay !== 'paid' ? `<button type="button" class="btn btn-sm btn-primary" data-pay="${e.courseId}">Pay now (demo)</button>` : '<p class="small text-secondary mb-0">Modules unlocked on Courses / Home.</p>'}
+      </div>`;
+    });
+  }
+  if (pays.length) {
+    html += `<h3 class="h6 mt-3 mb-2">Payment history</h3>`;
+    pays.slice(0, 5).forEach((p) => {
+      html += `<div class="list-card"><p class="mb-0 small">${formatMoney(p.amount)} · ${escapeHtml(p.ref || '')} · ${p.at ? new Date(p.at).toLocaleDateString() : ''}</p></div>`;
+    });
+  }
+  content().innerHTML = html;
+  wirePageNav(goHome);
+  content().querySelectorAll('[data-pay]').forEach((btn) => btn.addEventListener('click', () => {
+    const courseId = btn.getAttribute('data-pay');
+    const c = getCourse(courseId);
+    recordPayment({ learnerId: s.id, courseId, amount: c?.feeZAR || 0, method: 'card' });
+    renderPayments();
+  }));
+  focusPageHeading();
+}
+
+/** ========== About / certificate teaser ========== */
+function renderAbout() {
+  const s = getSession();
+  const approved = s && !isStaff(s) ? getApprovedEnrolments(s.id) : [];
+  let certHtml = '';
+  if (approved.length) {
+    approved.forEach((e) => {
+      const prog = getCourseProgress(s.id, e.courseId);
+      const cert = prog.pct >= 100 ? ensureCertificate(s.id, e.courseId) : null;
+      const c = getCourse(e.courseId);
+      if (cert) {
+        certHtml += `<div class="list-card"><h3>Certificate eligible</h3>
+          <p class="mb-0 small">${escapeHtml(c?.programme || '')} · Code ${escapeHtml(cert.code)} · Complete all lessons to qualify for issue.</p></div>`;
+      } else {
+        certHtml += `<div class="list-card"><h3>${escapeHtml(c?.programme || '')}</h3>
+          <p class="mb-0 small">Progress ${prog.pct}% — finish all lessons for certificate eligibility.</p></div>`;
+      }
+    });
+  }
+  content().innerHTML = pageNavBar({ backLabel: 'Back to Home' }) +
+    `<h2 class="page-title">About EduFlow</h2>
+    <div class="content-block"><p class="mb-2">Mid-level LMS for training providers: applications, fees, modules, attendance, and grading.</p>
+    <p class="mb-0"><strong>Demo logins</strong><br>Admin: admin@eduflow.test / admin123<br>Facilitator: facilitator@eduflow.test / facil123<br>Learner: learner1@gmail.com / learner123</p></div>
+    ${certHtml}
+    <button class="btn btn-outline-light w-100 mt-3" id="btn-logout-about">Sign out</button>`;
+  wirePageNav(goHome);
+  document.getElementById('btn-logout-about')?.addEventListener('click', logout);
+  focusPageHeading();
+}
+
+function renderAdminHome() {
+  const enrolments = getEnrolments();
+  const pending = enrolments.filter((e) => e.status === 'pending');
+  const toGrade = getSubmissionsList().filter((x) => x.status === 'submitted');
+  const day = todayISODate();
+  const attToday = getAttendance().filter((a) => a.date === day);
+  const attPending = attToday.filter((a) => a.status !== 'approved').length;
+  content().innerHTML = `<div class="welcome-banner"><h2>Provider dashboard</h2>
+    <p>Approve applications · Grade submissions · Confirm attendance</p></div>
+    <div class="list-card list-link" id="dash-pending" role="button" tabindex="0"><h3>Pending applications</h3><p class="mb-0">${pending.length} awaiting review</p></div>
+    <div class="list-card list-link" id="dash-grade" role="button" tabindex="0"><h3>To grade</h3><p class="mb-0">${toGrade.length} submissions</p></div>
+    <div class="list-card list-link" id="dash-att" role="button" tabindex="0"><h3>Attendance today</h3><p class="mb-0">${attToday.length} signed · ${attPending} to approve</p></div>
+    <div class="list-card list-link" id="dash-courses" role="button" tabindex="0"><h3>Programmes</h3><p class="mb-0">${getCourses().length} active</p></div>`;
+  document.getElementById('dash-pending')?.addEventListener('click', renderApprovals);
+  document.getElementById('dash-grade')?.addEventListener('click', () => { renderGrading(); setNavActive('grade'); });
+  document.getElementById('dash-att')?.addEventListener('click', () => { renderLiveSessions(); setNavActive('live'); });
+  document.getElementById('dash-courses')?.addEventListener('click', () => { renderCatalog(); setNavActive('courses'); });
+  focusPageHeading();
+}
+
 async function bootEduFlow() {
   try { await seedIfNeeded(); } catch (e) { console.error(e); }
+  try { ensureDemoEnrolments(); } catch (e) { console.error(e); }
   if (typeof enforceOneProgrammeRule === 'function') enforceOneProgrammeRule();
   if (typeof wireThemeToggles === 'function') wireThemeToggles();
   setTimeout(() => document.getElementById('splash')?.classList.add('hide'), 400);
   document.getElementById('login-form')?.addEventListener('submit', (e) => {
     e.preventDefault();
+    try { ensureDemoEnrolments(); } catch (_) {}
     const result = login(document.getElementById('email').value.trim(), document.getElementById('password').value);
     const err = document.getElementById('login-error');
     if (!result.ok) { if (err) { err.textContent = result.message; err.classList.remove('d-none'); } return; }
