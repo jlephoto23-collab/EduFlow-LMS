@@ -83,7 +83,7 @@ function defaultCourses() {
       description: 'Analyse requirements and contribute to systems development in an ICT environment.',
       lessons: [
         { id: 'its_g1', title: 'Learner guide: Systems development overview', type: 'guide', order: 1, moduleNum: 1, body: 'From business need to working software: requirements, design, build, test and deploy.' },
-        { id: 'its_m1', title: 'Module 1: Requirements gathering', type: 'content', order: 2, moduleNum: 1, body: 'Interview stakeholders, document functional requirements, and prioritise with MoSCoW (Must, Should, Could, Won\'t).' },
+        { id: 'its_m1', title: 'Module 1: Requirements gathering', type: 'content', order: 2, moduleNum: 1, body: 'Interview stakeholders, document functional requirements, and prioritise with MoSCoW (Must, Should, Could, Wont).' },
         { id: 'its_q1', title: 'Formative: Requirements', type: 'quiz', order: 3, moduleNum: 1, quiz: { passMark: 70, questions: [
           { q: 'A functional requirement describes:', options: ['Server brand only', 'What the system must do for users', 'Office furniture', 'Payroll tax rates only'], correctIndex: 1 },
         ]}},
@@ -109,7 +109,6 @@ function runMinimalSeed() {
   save(KEYS.enrolments, [
     { id: 'enr1', learnerId: 'u_l1', courseId: 'c_pm4', status: 'approved', paymentStatus: 'paid', enrolledAt: new Date().toISOString() },
   ], { silent: true });
-  // Sample graded submission for facilitator demo (Competent / NYC trail)
   save(KEYS.submissions, [
     {
       id: 'sub_demo1',
@@ -152,7 +151,6 @@ export async function seedIfNeeded() {
   const users = load(KEYS.users, null);
   const ver = load('ef_seed_ver', 0);
 
-  // Refresh catalogue + demo names when seed is older than 13 (keeps enrolments)
   if (users && Array.isArray(users) && users.length > 0 && ver >= 10 && ver < 13) {
     save(KEYS.courses, defaultCourses(), { silent: true });
     const next = defaultUsers();
@@ -174,8 +172,8 @@ export async function seedIfNeeded() {
     return;
   }
 
-  if (users && Array.isArray((users) && users.length > 0 && ver >= 13) {
-    if (!users.some(u => u.email === 'admin@eduflow.test')) {
+  if (users && Array.isArray(users) && users.length > 0 && ver >= 13) {
+    if (!users.some((u) => u.email === 'admin@eduflow.test')) {
       users.unshift(defaultUsers()[0]);
       save(KEYS.users, users, { silent: true });
     }
