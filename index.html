@@ -25,17 +25,18 @@
   <link rel="apple-touch-icon" href="icons/icon.svg">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css?v=20261126f">
-  <link rel="stylesheet" href="css/onboard.css?v=20261126f">
-  <link rel="stylesheet" href="css/views.css?v=20261126f">
+  <link rel="stylesheet" href="css/styles.css?v=20261126g">
+  <link rel="stylesheet" href="css/onboard.css?v=20261126g">
+  <link rel="stylesheet" href="css/views.css?v=20261126g">
+  <style>.splash-title{font-size:1.5rem;font-weight:800;margin:.35rem 0}</style>
 </head>
 <body>
   <a class="skip-link" href="#main-shell" id="skip-to-content">Skip to main content</a>
   <div id="sr-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
 
-  <div id="splash">
+  <div id="splash" aria-hidden="true">
     <div class="splash-logo">E</div>
-    <h1>EduFlow</h1>
+    <p class="splash-title">EduFlow</p>
     <p>Skills development · Enrol · Learn · Assess</p>
     <div class="spinner"></div>
   </div>
@@ -43,10 +44,8 @@
   <header class="topbar" role="banner">
     <div class="brand">
       <span class="brand-mark" aria-hidden="true">E</span>
-      <div class="brand-text">
-        <span class="brand-name">EduFlow</span>
-        <span class="brand-sub" id="brand-sub">Skills development · Enrol · Learn · Assess</span>
-      </div>
+      <span class="brand-name">EduFlow</span>
+      <span class="brand-sub" id="brand-sub">Skills development · Enrol · Learn · Assess</span>
     </div>
     <div class="topbar-actions">
       <div class="topbar-status" id="syncStatus" title="Data syncs across open tabs">
@@ -60,7 +59,6 @@
   </header>
 
   <main class="shell" id="main-shell">
-    <!-- SIGN IN -->
     <section id="view-signin" class="view is-active" aria-label="Sign in">
       <div class="card auth-card">
         <h1 class="view-title">Sign in</h1>
@@ -101,32 +99,29 @@
       </div>
     </section>
 
-    <!-- STEP 1 -->
-    <section id="view-step-1" class="view" aria-label="Step 1 of 3 Create account">
-           <div class="card auth-card">
+    <section id="view-step-1" class="view" hidden inert aria-hidden="true" aria-label="Step 1 of 3 Create account">
+      <div class="card auth-card">
         <p class="step-pill">Step 1 of 3</p>
-        <h1 class="view-title">Create your account</h1>
+        <h2 class="view-title">Create your account</h2>
         <p class="view-lead">Register with your email. We will send a verification code.</p>
         <form id="register-form">
           <div class="form-section">
-            <h2 class="form-section-title">Your details</h2>
-            <div class="field-grid">
-              <div class="field-group field-full">
-                <label class="form-label" for="reg-name">Full name</label>
-                <input type="text" id="reg-name" class="form-control" required placeholder="Your full name" autocomplete="name">
-              </div>
-              <div class="field-group field-full">
-                <label class="form-label" for="reg-email">Gmail / email</label>
-                <input type="email" id="reg-email" class="form-control" required placeholder="you@gmail.com" autocomplete="email">
-              </div>
-              <div class="field-group field-full">
-                <label class="form-label" for="reg-phone">Phone</label>
-                <input type="tel" id="reg-phone" class="form-control" placeholder="+27 …" autocomplete="tel">
-              </div>
+            <h3 class="form-section-title">Your details</h3>
+            <div class="field-group">
+              <label class="form-label" for="reg-name">Full name</label>
+              <input type="text" id="reg-name" class="form-control" required placeholder="Your full name" autocomplete="name">
+            </div>
+            <div class="field-group">
+              <label class="form-label" for="reg-email">Gmail / email</label>
+              <input type="email" id="reg-email" class="form-control" required placeholder="you@gmail.com" autocomplete="email">
+            </div>
+            <div class="field-group">
+              <label class="form-label" for="reg-phone">Phone</label>
+              <input type="tel" id="reg-phone" class="form-control" placeholder="+27 …" autocomplete="tel">
             </div>
           </div>
           <div class="form-section">
-            <h2 class="form-section-title">Password</h2>
+            <h3 class="form-section-title">Password</h3>
             <div class="field-group">
               <label class="form-label" for="reg-password">Password (min 6 characters)</label>
               <input type="password" id="reg-password" class="form-control" required minlength="6" autocomplete="new-password">
@@ -137,17 +132,16 @@
             </div>
           </div>
           <div id="reg-error" class="alert alert-danger d-none py-2" role="alert"></div>
-          <button type="submit" class="btn btn-primary btn-lg w-100">Create account &amp; continue</button>
+          <button type="submit" class="btn btn-primary btn-lg w-100">Create account & continue</button>
         </form>
         <p class="text-center mt-3 mb-0"><a href="#" id="btn-show-login-from-reg" class="auth-link">Already have an account? Sign in</a></p>
       </div>
     </section>
 
-    <!-- STEP 2 -->
-    <section id="view-step-2" class="view" aria-label="Step 2 of 3 Verify email">
+    <section id="view-step-2" class="view" hidden inert aria-hidden="true" aria-label="Step 2 of 3 Verify email">
       <div class="card auth-card">
         <p class="step-pill">Step 2 of 3</p>
-        <h1 class="view-title">Verify your email</h1>
+        <h2 class="view-title">Verify your email</h2>
         <p class="view-lead">Code sent to <strong id="verifyEmailDisplay">your email</strong>.</p>
         <div id="verify-demo-code" class="content-block mb-3 d-none" style="font-size:.85rem"></div>
         <form id="verify-form">
@@ -156,29 +150,28 @@
             <input type="text" id="verify-code" class="form-control form-control-lg" inputmode="numeric" maxlength="6" required placeholder="6-digit code" autocomplete="one-time-code">
           </div>
           <div id="verify-error" class="alert alert-danger d-none py-2" role="alert"></div>
-          <button type="submit" class="btn btn-primary btn-lg w-100">Verify &amp; continue</button>
+          <button type="submit" class="btn btn-primary btn-lg w-100">Verify & continue</button>
         </form>
         <p class="text-center mt-3 mb-1"><a href="#" id="btn-resend-code" class="auth-link">Resend code</a></p>
         <p class="text-center mb-0"><a href="#" id="btn-show-login-from-verify" class="auth-link">Back to sign in</a></p>
       </div>
     </section>
 
-    <!-- STEP 3 -->
-    <section id="view-step-3" class="view" aria-label="Step 3 of 3 Application">
+    <section id="view-step-3" class="view" hidden inert aria-hidden="true" aria-label="Step 3 of 3 Application">
       <div class="card auth-card">
         <p class="step-pill">Step 3 of 3</p>
-        <h1 class="view-title">Application</h1>
+        <h2 class="view-title">Application</h2>
         <p class="view-lead">Choose a programme and upload required documents.</p>
         <form id="apply-form">
           <div class="form-section">
-            <h2 class="form-section-title">Programme</h2>
+            <h3 class="form-section-title">Programme</h3>
             <div class="field-group">
               <label class="form-label" for="apply-programme">Preferred programme</label>
               <select id="apply-programme" class="form-control" required></select>
             </div>
           </div>
           <div class="form-section">
-            <h2 class="form-section-title">Documents</h2>
+            <h3 class="form-section-title">Documents</h3>
             <p class="field-hint">Accepted: PDF, JPG, PNG · Max ~1.5 MB per file</p>
             <div class="field-group">
               <label class="form-label" for="apply-id">ID / Smart ID *</label>
@@ -205,7 +198,7 @@
             </div>
           </div>
           <div class="form-section">
-            <h2 class="form-section-title">Notes</h2>
+            <h3 class="form-section-title">Notes</h3>
             <div class="field-group">
               <label class="form-label" for="apply-notes">Additional notes (optional)</label>
               <textarea id="apply-notes" class="form-control" rows="2"></textarea>
@@ -218,14 +211,12 @@
       </div>
     </section>
 
-    <!-- WORKSPACE (signed in) -->
-    <section id="view-workspace" class="view" aria-label="Workspace">
+    <section id="view-workspace" class="view" hidden inert aria-hidden="true" aria-label="Workspace">
       <div id="content" class="content workspace-content" role="region" tabindex="-1" aria-label="Main content"></div>
       <nav class="bottom-nav" id="bottom-nav" role="navigation" aria-label="Primary"></nav>
     </section>
   </main>
 
-  <!-- Compatibility aliases used by legacy modules -->
   <div id="login-view" class="d-none" aria-hidden="true"></div>
   <div id="app-view" class="d-none" aria-hidden="true"></div>
   <div id="login-panel" class="d-none" aria-hidden="true"></div>
@@ -234,12 +225,12 @@
   <div id="apply-panel" class="d-none" aria-hidden="true"></div>
   <span id="verify-email-label" class="d-none" aria-hidden="true"></span>
 
-  <script type="module" src="js/app.js?v=20261126f"></script>
+  <script type="module" src="js/app.js?v=20261126g"></script>
   <script>
     setTimeout(function () {
       var s = document.getElementById('splash');
       if (s) s.classList.add('hide');
-    }, 1600);
+    }, 800);
     let deferredPrompt = null;
     const btnInstall = document.getElementById('btn-install-app');
     window.addEventListener('beforeinstallprompt', (e) => {
@@ -256,7 +247,7 @@
     });
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=20261126f').catch(() => {});
+        navigator.serviceWorker.register('./sw.js?v=20261126g').catch(function () {});
       });
     }
   </script>
